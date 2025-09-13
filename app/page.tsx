@@ -1,12 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Users, Eye, BarChart3 } from "lucide-react"
+import { Search, Users, BarChart3 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PatientTable } from "@/components/patient-table"
-import { Patient360 } from "@/components/patient-360"
 import { QueryTranslation } from "@/components/query-translation"
 import { AgenticToolPanel } from "@/components/agentic-tool-panel"
 import { GraphVisualization } from "@/components/graph-visualization"
@@ -16,15 +15,34 @@ import { TopNavBar } from "@/components/top-nav-bar"
 export default function HealthcareDashboard() {
   const [query, setQuery] = useState("")
   const [showTranslation, setShowTranslation] = useState(false)
-  const [viewMode, setViewMode] = useState<"table" | "patient360" | "graph">("table")
+  const [viewMode, setViewMode] = useState<"table" | "graph">("table")
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setShowTranslation(true)
-    // Simulate query processing
+    const doctor = "Dr. Demo"
+    const summary = query.slice(0, 200)
+    try {
+      await fetch("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "search",
+          title: "Search Executed",
+          summary,
+          doctor,
+          query,
+          status: "completed",
+          resultSummary: viewMode === "table" ? "Viewing patient cohort" : "Viewing graph",
+          details: { viewMode },
+        }),
+      })
+    } catch {
+      // ignore logging failure client-side
+    }
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground pb-16">
       {/* Top Navigation */}
       <TopNavBar />
 
@@ -36,7 +54,7 @@ export default function HealthcareDashboard() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Ask me anything about your patients... e.g., 'Show all diabetic patients on policy X who missed an A1C test in the past year'"
+                placeholder="Ask me anything about your patients..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="pl-10 text-base h-12"
@@ -51,27 +69,17 @@ export default function HealthcareDashboard() {
           {/* Query Translation Panel */}
           {showTranslation && (
             <QueryTranslation
-              naturalLanguage="Show all diabetic patients on policy X who missed an A1C test in the past year"
-              cypherQuery="MATCH (p:Patient)-[:HAS_CONDITION]->(c:Condition {name: 'Diabetes'})
-MATCH (p)-[:COVERED_BY]->(pol:Policy {name: 'Policy X'})
-WHERE NOT EXISTS {
-  (p)-[:HAD_LAB]->(l:Lab {type: 'A1C'})
-  WHERE l.date >= date() - duration('P1Y')
-}
-RETURN p"
+              naturalLanguage={query}
+              cypherQuery={""}
             />
           )}
 
           {/* View Mode Tabs */}
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="mb-6">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="table" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Patient Cohort
-              </TabsTrigger>
-              <TabsTrigger value="patient360" className="flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                Patient 360
               </TabsTrigger>
               <TabsTrigger value="graph" className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
@@ -81,10 +89,6 @@ RETURN p"
 
             <TabsContent value="table" className="mt-6">
               <PatientTable />
-            </TabsContent>
-
-            <TabsContent value="patient360" className="mt-6">
-              <Patient360 />
             </TabsContent>
 
             <TabsContent value="graph" className="mt-6">

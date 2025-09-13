@@ -53,11 +53,11 @@ export function Patient360() {
               <div className="space-y-1">
                 <Badge variant="destructive" className="flex items-center gap-1 w-fit">
                   <AlertCircle className="h-3 w-3" />
-                  High A1C
+                  Follow-up Needed
                 </Badge>
                 <Badge variant="destructive" className="flex items-center gap-1 w-fit">
                   <AlertCircle className="h-3 w-3" />
-                  Missed Appointment
+                  Action Required
                 </Badge>
               </div>
             </div>
@@ -82,7 +82,7 @@ export function Patient360() {
                   <h4 className="font-semibold">Annual Physical</h4>
                   <span className="text-sm text-muted-foreground">Jan 15, 2024</span>
                 </div>
-                <p className="text-sm text-muted-foreground">Dr. Smith • A1C: 8.2% (High)</p>
+                <p className="text-sm text-muted-foreground">Dr. Smith • Lab results reviewed</p>
                 <div className="flex gap-1 mt-2">
                   <Badge variant="outline">Diabetes Management</Badge>
                   <Badge variant="outline">Medication Review</Badge>
@@ -94,7 +94,7 @@ export function Patient360() {
                   <h4 className="font-semibold">Follow-up Visit</h4>
                   <span className="text-sm text-muted-foreground">Oct 20, 2023</span>
                 </div>
-                <p className="text-sm text-muted-foreground">Dr. Smith • A1C: 7.9%</p>
+                <p className="text-sm text-muted-foreground">Dr. Smith • Follow-up notes added</p>
                 <div className="flex gap-1 mt-2">
                   <Badge variant="outline">Lab Review</Badge>
                 </div>

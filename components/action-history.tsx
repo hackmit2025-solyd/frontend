@@ -15,121 +15,103 @@ import {
   Eye,
   MoreHorizontal,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 interface ActionHistoryProps {
   searchQuery: string
 }
 
-const mockActions = [
-  {
-    id: 1,
-    type: "voice_query",
-    title: "Voice Query: Diabetic Patients",
-    description: "Show all diabetic patients on policy X who missed an A1C test in the past year",
-    user: "Dr. Smith",
-    timestamp: "2024-01-15 14:30:22",
-    status: "completed",
-    duration: "2.3s",
-    results: "3 patients found",
-    icon: Mic,
-    details: {
-      audioLength: "8.2s",
-      transcriptionAccuracy: "98%",
-      queryGenerated: "MATCH (p:Patient)-[:HAS_CONDITION]->(c:Condition {name: 'Diabetes'})...",
-    },
-  },
-  {
-    id: 2,
-    type: "appointment_booking",
-    title: "Appointment Scheduled",
-    description: "Booked follow-up appointment for Sarah Johnson",
-    user: "Dr. Smith",
-    timestamp: "2024-01-15 14:25:15",
-    status: "completed",
-    duration: "1.8s",
-    results: "Appointment confirmed",
-    icon: Calendar,
-    details: {
-      patientId: "12345678",
-      appointmentDate: "2024-01-22 10:00 AM",
-      appointmentType: "Follow-up",
-    },
-  },
-  {
-    id: 3,
-    type: "database_query",
-    title: "Patient Cohort Analysis",
-    description: "Retrieved patient data for diabetes management program",
-    user: "System",
-    timestamp: "2024-01-15 14:20:45",
-    status: "completed",
-    duration: "0.8s",
-    results: "127 records processed",
-    icon: Database,
-    details: {
-      queryType: "Cypher",
-      recordsScanned: "1,247",
-      recordsReturned: "127",
-    },
-  },
-  {
-    id: 4,
-    type: "voice_command",
-    title: "Voice Command: Send Message",
-    description: "Sent medication reminder to Michael Chen",
-    user: "Dr. Johnson",
-    timestamp: "2024-01-15 13:45:30",
-    status: "completed",
-    duration: "3.1s",
-    results: "Message sent",
-    icon: Phone,
-    details: {
-      audioLength: "12.5s",
-      messageType: "SMS",
-      deliveryStatus: "Delivered",
-    },
-  },
-  {
-    id: 5,
-    type: "patient_lookup",
-    title: "Patient 360 View",
-    description: "Accessed comprehensive patient profile for Emily Rodriguez",
-    user: "Dr. Williams",
-    timestamp: "2024-01-15 13:30:12",
-    status: "completed",
-    duration: "1.2s",
-    results: "Profile loaded",
-    icon: Eye,
-    details: {
-      patientId: "87654321",
-      sectionsLoaded: "Demographics, Encounters, Labs, Medications",
-      dataPoints: "47",
-    },
-  },
-  {
-    id: 6,
-    type: "coverage_verification",
-    title: "Insurance Verification Failed",
-    description: "Unable to verify coverage for patient John Doe",
-    user: "System",
-    timestamp: "2024-01-15 12:15:08",
-    status: "failed",
-    duration: "5.2s",
-    results: "Verification timeout",
-    icon: AlertTriangle,
-    details: {
-      errorCode: "TIMEOUT_001",
-      retryAttempts: "3",
-      lastResponse: "Gateway timeout",
-    },
-  },
-]
+const mockActions: any[] = []
+
+type ActionDoc = {
+  _id: string
+  type: string
+  title?: string
+  summary: string
+  doctor: string
+  timestamp?: string
+  status?: string
+  durationMs?: number
+  resultSummary?: string
+  details?: Record<string, any>
+}
+
+type UiAction = {
+  id: string | number
+  type: string
+  title: string
+  description: string
+  user: string
+  timestamp: string
+  status: string
+  duration?: string
+  results?: string
+  icon: any
+  details: Record<string, any>
+}
+
+const iconByType: Record<string, any> = {
+  voice_query: Mic,
+  voice_command: Mic,
+  appointment_booking: Calendar,
+  database_query: Database,
+  patient_lookup: Eye,
+  coverage_verification: AlertTriangle,
+  search: Database,
+}
+
+function toUi(doc: ActionDoc): UiAction {
+  const icon = iconByType[doc.type] || Database
+  const title = doc.title && doc.title.trim().length > 0 ? doc.title : `${doc.type} action`
+  const ts = doc.timestamp ? new Date(doc.timestamp) : new Date()
+  const duration = typeof doc.durationMs === "number" ? `${(doc.durationMs / 1000).toFixed(1)}s` : undefined
+  return {
+    id: doc._id,
+    type: doc.type,
+    title,
+    description: doc.summary,
+    user: doc.doctor || "Anonymous",
+    timestamp: ts.toLocaleString(),
+    status: doc.status || "completed",
+    duration,
+    results: doc.resultSummary,
+    icon,
+    details: doc.details || {},
+  }
+}
 
 export function ActionHistory({ searchQuery }: ActionHistoryProps) {
-  const [expandedAction, setExpandedAction] = useState<number | null>(null)
+  const [expandedAction, setExpandedAction] = useState<number | string | null>(null)
+  const [apiActions, setApiActions] = useState<UiAction[] | null>(null)
 
-  const filteredActions = mockActions.filter(
+  useEffect(() => {
+    let ignore = false
+    const controller = new AbortController()
+    const q = searchQuery?.trim()
+    const params = new URLSearchParams()
+    params.set("limit", "50")
+    if (q) params.set("q", q)
+
+    fetch(`/api/actions?${params.toString()}`, { signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to load actions")
+        const data = await res.json()
+        const docs: ActionDoc[] = data.actions || []
+        const list = docs.map(toUi)
+        if (!ignore) setApiActions(list)
+      })
+      .catch(() => {
+        if (!ignore) setApiActions(null)
+      })
+
+    return () => {
+      ignore = true
+      controller.abort()
+    }
+  }, [searchQuery])
+
+  const source = apiActions && apiActions.length > 0 ? apiActions : (mockActions as unknown as UiAction[])
+  const filteredActions = source.filter(
     (action) =>
       action.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       action.description.toLowerCase().includes(searchQuery.toLowerCase()) ||

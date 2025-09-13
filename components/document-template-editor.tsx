@@ -175,7 +175,7 @@ export function DocumentTemplateEditor({ data, onSave, onCancel, fileName }: Doc
   }, {} as Record<string, any>)
 
   // Helper functions for relationship validation
-  const getValidRelationshipTypes = (sourceId: string, targetId: string) => {
+  const getValidRelationshipTypes = (sourceId: string, targetId: string): string[] => {
     if (!sourceId || !targetId || !nodesById[sourceId] || !nodesById[targetId]) return []
 
     const sourceType = nodesById[sourceId].type
@@ -183,27 +183,27 @@ export function DocumentTemplateEditor({ data, onSave, onCancel, fileName }: Doc
 
     return COMMON_RELATIONSHIP_TYPES.filter(relType => {
       const mapping = RELATIONSHIP_MAPPINGS[relType as keyof typeof RELATIONSHIP_MAPPINGS]
-      return mapping.validSources.includes(sourceType) && mapping.validTargets.includes(targetType)
+      return mapping.validSources.includes(sourceType as never) && mapping.validTargets.includes(targetType as never)
     })
   }
 
-  const getValidSourceNodes = (relationshipType: string, targetId?: string) => {
+  const getValidSourceNodes = (relationshipType: string): string[] => {
     const mapping = RELATIONSHIP_MAPPINGS[relationshipType as keyof typeof RELATIONSHIP_MAPPINGS]
     if (!mapping) return availableNodeIds
 
     return availableNodeIds.filter(nodeId => {
       const node = nodesById[nodeId]
-      return mapping.validSources.includes(node?.type)
+      return mapping.validSources.includes(node?.type as never)
     })
   }
 
-  const getValidTargetNodes = (relationshipType: string, sourceId?: string) => {
+  const getValidTargetNodes = (relationshipType: string): string[] => {
     const mapping = RELATIONSHIP_MAPPINGS[relationshipType as keyof typeof RELATIONSHIP_MAPPINGS]
     if (!mapping) return availableNodeIds
 
     return availableNodeIds.filter(nodeId => {
       const node = nodesById[nodeId]
-      return mapping.validTargets.includes(node?.type)
+      return mapping.validTargets.includes(node?.type as never)
     })
   }
 
@@ -371,6 +371,30 @@ export function DocumentTemplateEditor({ data, onSave, onCancel, fileName }: Doc
                 </Button>
               </div>
 
+              {/* Relationship Schema Reference */}
+              <Card className="bg-muted/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Valid Relationship Patterns</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {Object.entries(RELATIONSHIP_MAPPINGS).map(([relType, mapping]) => (
+                      <div key={relType} className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {mapping.validSources[0]}
+                        </Badge>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="font-medium">{relType}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <Badge variant="outline" className="text-xs">
+                          {mapping.validTargets[0]}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
               {relationshipFields.map((field, index) => (
                 <Card key={field.id}>
                   <CardHeader className="pb-3">
@@ -404,26 +428,42 @@ export function DocumentTemplateEditor({ data, onSave, onCancel, fileName }: Doc
                       <FormField
                         control={form.control}
                         name={`relationships.${index}.type`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Type</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select relationship type" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {COMMON_RELATIONSHIP_TYPES.map((type) => (
-                                  <SelectItem key={type} value={type}>
-                                    {type}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const currentSource = form.watch(`relationships.${index}.source`)
+                          const currentTarget = form.watch(`relationships.${index}.target`)
+                          const validTypes = currentSource && currentTarget
+                            ? getValidRelationshipTypes(currentSource, currentTarget)
+                            : COMMON_RELATIONSHIP_TYPES
+
+                          return (
+                            <FormItem>
+                              <FormLabel>Type</FormLabel>
+                              <Select
+                                onValueChange={(value) => {
+                                  field.onChange(value)
+                                  // Clear source and target when relationship type changes
+                                  form.setValue(`relationships.${index}.source`, "")
+                                  form.setValue(`relationships.${index}.target`, "")
+                                }}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select relationship type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {validTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>
+                                      {type}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )
+                        }}
                       />
                     </div>
 
@@ -431,50 +471,88 @@ export function DocumentTemplateEditor({ data, onSave, onCancel, fileName }: Doc
                       <FormField
                         control={form.control}
                         name={`relationships.${index}.source`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Source Node</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select source node" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {availableNodeIds.map((nodeId) => (
-                                  <SelectItem key={nodeId} value={nodeId}>
-                                    {nodeId}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const currentType = form.watch(`relationships.${index}.type`)
+                          const validSources = currentType ? getValidSourceNodes(currentType) : availableNodeIds
+
+                          return (
+                            <FormItem>
+                              <FormLabel>Source Node</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select source node" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {validSources.length === 0 ? (
+                                    <div className="p-2 text-sm text-muted-foreground">
+                                      No valid source nodes for this relationship type
+                                    </div>
+                                  ) : (
+                                    validSources.map((nodeId) => {
+                                      const node = nodesById[nodeId]
+                                      return (
+                                        <SelectItem key={nodeId} value={nodeId}>
+                                          {nodeId} ({node?.type})
+                                        </SelectItem>
+                                      )
+                                    })
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              {currentType && (
+                                <p className="text-xs text-muted-foreground">
+                                  Valid sources: {RELATIONSHIP_MAPPINGS[currentType as keyof typeof RELATIONSHIP_MAPPINGS]?.validSources.join(', ')}
+                                </p>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )
+                        }}
                       />
                       <FormField
                         control={form.control}
                         name={`relationships.${index}.target`}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Target Node</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select target node" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {availableNodeIds.map((nodeId) => (
-                                  <SelectItem key={nodeId} value={nodeId}>
-                                    {nodeId}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
+                        render={({ field }) => {
+                          const currentType = form.watch(`relationships.${index}.type`)
+                          const validTargets = currentType ? getValidTargetNodes(currentType) : availableNodeIds
+
+                          return (
+                            <FormItem>
+                              <FormLabel>Target Node</FormLabel>
+                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select target node" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {validTargets.length === 0 ? (
+                                    <div className="p-2 text-sm text-muted-foreground">
+                                      No valid target nodes for this relationship type
+                                    </div>
+                                  ) : (
+                                    validTargets.map((nodeId) => {
+                                      const node = nodesById[nodeId]
+                                      return (
+                                        <SelectItem key={nodeId} value={nodeId}>
+                                          {nodeId} ({node?.type})
+                                        </SelectItem>
+                                      )
+                                    })
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              {currentType && (
+                                <p className="text-xs text-muted-foreground">
+                                  Valid targets: {RELATIONSHIP_MAPPINGS[currentType as keyof typeof RELATIONSHIP_MAPPINGS]?.validTargets.join(', ')}
+                                </p>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )
+                        }}
                       />
                     </div>
 

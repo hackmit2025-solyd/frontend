@@ -207,10 +207,10 @@ export default function UploadsPage() {
     return mockData
   }
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     setIsUploading(true)
 
-    acceptedFiles.forEach((file) => {
+    for (const file of acceptedFiles) {
       const fileId = Math.random().toString(36).substr(2, 9)
       const newFile: UploadedFile = {
         id: fileId,
@@ -223,19 +223,57 @@ export default function UploadsPage() {
 
       setUploadedFiles(prev => [...prev, newFile])
 
-      // Simulate upload and processing
-      setTimeout(() => {
-        const extractedData = mockExtractData(file.name)
+      try {
+        // Create FormData for file upload
+        const formData = new FormData()
+        formData.append('file', file)
+
+        // Upload to our API endpoint
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          console.log('Upload successful:', result)
+
+          // For now, use mock data for extracted data since processing is not implemented
+          const extractedData = mockExtractData(file.name)
+
+          setUploadedFiles(prev =>
+            prev.map(f =>
+              f.id === fileId
+                ? { ...f, status: "completed" as const, extractedData }
+                : f
+            )
+          )
+        } else {
+          const error = await response.json()
+          console.error('Upload failed:', error)
+
+          setUploadedFiles(prev =>
+            prev.map(f =>
+              f.id === fileId
+                ? { ...f, status: "error" as const }
+                : f
+            )
+          )
+        }
+      } catch (error) {
+        console.error('Upload error:', error)
+
         setUploadedFiles(prev =>
           prev.map(f =>
             f.id === fileId
-              ? { ...f, status: "completed" as const, extractedData }
+              ? { ...f, status: "error" as const }
               : f
           )
         )
-        setIsUploading(false)
-      }, 2000)
-    })
+      }
+    }
+
+    setIsUploading(false)
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -276,7 +314,7 @@ export default function UploadsPage() {
 
   if (editingFile) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background pb-16">
         <TopNavBar />
         <DocumentTemplateEditor
           data={editingFile.extractedData}
@@ -290,7 +328,7 @@ export default function UploadsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-16">
       <TopNavBar />
 
       <main className="container mx-auto p-6 max-w-6xl">

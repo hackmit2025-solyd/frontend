@@ -4,7 +4,7 @@ import { CheckCircle, Clock, AlertTriangle, Wifi } from "lucide-react"
 
 export function StatusBar() {
   return (
-    <footer className="border-t border-border bg-card px-6 py-3">
+    <footer className="fixed bottom-0 left-0 right-0 border-t border-border bg-card px-6 py-3 z-40">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
