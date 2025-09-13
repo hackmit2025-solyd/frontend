@@ -21,7 +21,25 @@ export default function HealthcareDashboard() {
     setShowTranslation(true)
     const doctor = "Dr. Demo"
     const summary = query.slice(0, 200)
+    const query_id = crypto.randomUUID()
+
     try {
+      // Call the new search API route
+      const searchResponse = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          query_id,
+        }),
+      })
+
+      if (!searchResponse.ok) {
+        const errorData = await searchResponse.json()
+        console.error("Search failed:", errorData)
+      }
+
+      // Log the search action (existing functionality)
       await fetch("/api/actions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -33,7 +51,7 @@ export default function HealthcareDashboard() {
           query,
           status: "completed",
           resultSummary: viewMode === "table" ? "Viewing patient cohort" : "Viewing graph",
-          details: { viewMode },
+          details: { viewMode, query_id },
         }),
       })
     } catch {
