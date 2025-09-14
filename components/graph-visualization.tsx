@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Network, ZoomIn, ZoomOut, RotateCcw, Filter, Eye, EyeOff } from "lucide-react"
-import Sigma from "sigma"
 import { MultiGraph } from "graphology"
 import { GraphFilters } from "@/components/graph-filters"
 import { NodeTooltip, NodeTooltipData } from "@/components/node-tooltip"
@@ -92,13 +91,14 @@ export function GraphVisualization({
   onShowAllRelationshipsChange,
 }: GraphVisualizationProps) {
   const vizRef = useRef<HTMLDivElement>(null)
-  const sigmaRef = useRef<Sigma | null>(null)
+  const sigmaRef = useRef<any>(null)
   const graphRef = useRef<MultiGraph | null>(null)
   const tooltipPinnedRef = useRef<boolean>(false)
   const hoveringTooltipRef = useRef<boolean>(false)
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [sigmaLoaded, setSigmaLoaded] = useState(false)
 
   // Use props if provided, otherwise use local state
   const [localFilters, setLocalFilters] = useState<GraphFiltersType>(createDefaultFilters())
@@ -140,6 +140,20 @@ export function GraphVisualization({
   const [tooltipPinned, setTooltipPinned] = useState(false)
   const [containerRect, setContainerRect] = useState<DOMRect | null>(null)
   const [hoveringTooltip, setHoveringTooltip] = useState(false)
+
+  // Dynamic Sigma import function
+  const loadSigma = async () => {
+    if (typeof window === 'undefined') return null
+    try {
+      const SigmaModule = await import('sigma')
+      setSigmaLoaded(true)
+      return SigmaModule.default
+    } catch (error) {
+      console.error('Failed to load Sigma:', error)
+      setError('Failed to load graph visualization library')
+      return null
+    }
+  }
 
   const getNodeColor = (label: string): string => {
     const colors = {
@@ -305,10 +319,14 @@ export function GraphVisualization({
     return response.json()
   }
 
-  const updateGraphWithData = (apiData: ApiResponse) => {
+  const updateGraphWithData = async (apiData: ApiResponse) => {
     if (!vizRef.current || !apiData?.nodes || !apiData?.edges) return
 
     try {
+      // Load Sigma dynamically
+      const Sigma = await loadSigma()
+      if (!Sigma) return
+
       // Clean up any existing instance
       if (sigmaRef.current) {
         sigmaRef.current.kill()
@@ -568,6 +586,10 @@ export function GraphVisualization({
     try {
       setLoading(true)
       setError(null)
+
+      // Load Sigma dynamically
+      const Sigma = await loadSigma()
+      if (!Sigma) return
 
       // Clean up any existing instance
       if (sigmaRef.current) {
@@ -865,7 +887,11 @@ export function GraphVisualization({
       const rect = vizRef.current.getBoundingClientRect()
       if (rect.width > 0 && rect.height > 0) {
         setLoading(true)
-        updateGraphWithData(data)
+        updateGraphWithData(data).catch(err => {
+          console.error('Failed to update graph with data:', err)
+          setError('Failed to update graph visualization')
+          setLoading(false)
+        })
       }
     }
   }, [data])

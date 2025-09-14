@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     }
 
     // TODO: Replace this with your actual backend server URL
-    const backendUrl = process.env.BACKEND_SERVER_URL || 'http://localhost:8000'
+    const backendUrl = process.env.BACKEND_SERVER_URL 
 
     // Forward the request to your backend server
     const response = await fetch(`${backendUrl}/api/search`, {

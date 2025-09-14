@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { PatientTable } from "@/components/patient-table"
 import { QueryTranslation } from "@/components/query-translation"
-import { GraphVisualization } from "@/components/graph-visualization"
+import dynamic from "next/dynamic"
 import { StatusBar } from "@/components/status-bar"
 import { TopNavBar } from "@/components/top-nav-bar"
 import { useHipaa } from "@/components/hipaa-provider"
@@ -354,3 +354,16 @@ export default function HealthcareDashboard() {
     </div>
   )
 }
+
+// Client-only GraphVisualization to avoid SSR/WebGL issues
+const GraphVisualization = dynamic(
+  () => import("@/components/graph-visualization").then(m => m.GraphVisualization),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
+        Loading graph...
+      </div>
+    ),
+  }
+)
