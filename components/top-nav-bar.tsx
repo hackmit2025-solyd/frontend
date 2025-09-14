@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Activity, History, Upload, Settings, Moon, Sun } from "lucide-react"
+import { Activity, History, Upload, Settings, Moon, Sun, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
+import { useHipaa } from "@/components/hipaa-provider"
 
 interface NavItem {
   name: string
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
 export function TopNavBar() {
   const pathname = usePathname()
   const { setTheme, resolvedTheme } = useTheme()
+  const { hipaaEnabled, setHipaaEnabled } = useHipaa()
 
   return (
     <header className="border-b border-border bg-card">
@@ -55,11 +57,15 @@ export function TopNavBar() {
               return (
                 <Link key={item.href} href={item.href}>
                   <Button
-                    variant={isActive ? "secondary" : "ghost"}
+                    variant="ghost"
                     size="sm"
                     className={cn(
                       "flex items-center gap-2 px-3 py-2",
-                      isActive && "bg-muted font-medium"
+                      isActive && (
+                        resolvedTheme === "dark"
+                          ? "bg-muted font-medium"
+                          : "bg-primary/10 text-primary border border-primary/20 font-medium hover:bg-primary/15"
+                      )
                     )}
                   >
                     <Icon className="h-4 w-4" />
@@ -90,6 +96,20 @@ export function TopNavBar() {
                   "h-4 w-4",
                   resolvedTheme === "dark" ? "text-foreground" : "text-muted-foreground"
                 )}
+              />
+            </div>
+
+            {/* Divider */}
+            <Separator orientation="vertical" className="mx-2 h-6" />
+
+            {/* HIPAA Mode Toggle */}
+            <div className="flex items-center gap-2 px-2">
+              <Shield className={cn("h-4 w-4", hipaaEnabled ? "text-foreground" : "text-muted-foreground")} />
+              <span className="text-xs text-muted-foreground">HIPAA</span>
+              <Switch
+                checked={hipaaEnabled}
+                onCheckedChange={(checked) => setHipaaEnabled(!!checked)}
+                aria-label="Toggle HIPAA mode"
               />
             </div>
           </nav>

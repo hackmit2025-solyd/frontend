@@ -43,11 +43,54 @@ interface ApiResponse {
   edges: ApiEdge[]
 }
 
-interface GraphVisualizationProps {
-  data?: ApiResponse
+// Edge color mapping for different relationship types
+const EDGE_COLOR_MAP: Record<string, string> = {
+  'HAS_ENCOUNTER': '#3b82f6',
+  'HAS_SYMPTOM': '#ef4444',
+  'DIAGNOSED_WITH': '#dc2626',
+  'PRESCRIBED': '#06b6d4',
+  'PERFORMED': '#f97316',
+  'TESTED_FOR': '#8b5cf6',
+  'TREATED_BY': '#10b981',
+  default: '#64748b'
 }
 
-export function GraphVisualization({ data }: GraphVisualizationProps) {
+// Function to get edge color based on type
+const getEdgeColor = (type: string): string => {
+  return EDGE_COLOR_MAP[type] || EDGE_COLOR_MAP.default
+}
+
+interface GraphVisualizationProps {
+  data?: ApiResponse
+  filters?: GraphFiltersType
+  availableNodeTypes?: string[]
+  availableRelationshipTypes?: string[]
+  filtersOpen?: boolean
+  onFiltersChange?: (filters: GraphFiltersType) => void
+  onAvailableNodeTypesChange?: (nodeTypes: string[]) => void
+  onAvailableRelationshipTypesChange?: (relationshipTypes: string[]) => void
+  onFiltersOpenChange?: (open: boolean) => void
+  onNodeTypesChange?: (nodeTypes: string[]) => void
+  onShowAllNodesChange?: (showAll: boolean) => void
+  onRelationshipTypesChange?: (relationshipTypes: string[]) => void
+  onShowAllRelationshipsChange?: (showAll: boolean) => void
+}
+
+export function GraphVisualization({
+  data,
+  filters: propsFilters,
+  availableNodeTypes: propsAvailableNodeTypes,
+  availableRelationshipTypes: propsAvailableRelationshipTypes,
+  filtersOpen: propsFiltersOpen,
+  onFiltersChange,
+  onAvailableNodeTypesChange,
+  onAvailableRelationshipTypesChange,
+  onFiltersOpenChange,
+  onNodeTypesChange,
+  onShowAllNodesChange,
+  onRelationshipTypesChange,
+  onShowAllRelationshipsChange,
+}: GraphVisualizationProps) {
   const vizRef = useRef<HTMLDivElement>(null)
   const sigmaRef = useRef<Sigma | null>(null)
   const graphRef = useRef<MultiGraph | null>(null)
@@ -56,10 +99,22 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filters, setFilters] = useState<GraphFiltersType>(createDefaultFilters())
-  const [availableNodeTypes, setAvailableNodeTypes] = useState<string[]>([])
-  const [availableRelationshipTypes, setAvailableRelationshipTypes] = useState<string[]>([])
-  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  // Use props if provided, otherwise use local state
+  const [localFilters, setLocalFilters] = useState<GraphFiltersType>(createDefaultFilters())
+  const [localAvailableNodeTypes, setLocalAvailableNodeTypes] = useState<string[]>([])
+  const [localAvailableRelationshipTypes, setLocalAvailableRelationshipTypes] = useState<string[]>([])
+  const [localFiltersOpen, setLocalFiltersOpen] = useState(false)
+
+  const filters = propsFilters ?? localFilters
+  const availableNodeTypes = propsAvailableNodeTypes ?? localAvailableNodeTypes
+  const availableRelationshipTypes = propsAvailableRelationshipTypes ?? localAvailableRelationshipTypes
+  const filtersOpen = propsFiltersOpen ?? localFiltersOpen
+
+  const setFilters = onFiltersChange ?? setLocalFilters
+  const setAvailableNodeTypes = onAvailableNodeTypesChange ?? setLocalAvailableNodeTypes
+  const setAvailableRelationshipTypes = onAvailableRelationshipTypesChange ?? setLocalAvailableRelationshipTypes
+  const setFiltersOpen = onFiltersOpenChange ?? setLocalFiltersOpen
   const [visibleStats, setVisibleStats] = useState({ nodes: 0, edges: 0 })
   const [legendVisible, setLegendVisible] = useState(true)
   const [tooltipData, setTooltipData] = useState<NodeTooltipData | null>(null)
@@ -142,7 +197,6 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
       sigmaRef.current = new Sigma(graph, vizRef.current, {
         renderEdgeLabels: true,
         defaultNodeColor: "#6b7280",
-        defaultEdgeColor: "#94a3b8",
         labelColor: { color: "#374151" },
         labelSize: 10,
         labelWeight: "600",
@@ -150,14 +204,27 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
         edgeLabelSize: 12,
         edgeLabelWeight: "600",
         edgeLabelFont: "Inter, Arial, sans-serif",
-        // GPU-friendly performance optimizations
-        performanceMode: true,
+        // GPU-friendly performance options (type-safe subset)
         allowInvalidContainer: false,
         hideLabelsOnMove: true,
         hideEdgesOnMove: true,
         labelGridCellSize: 100,
         labelDensity: 1,
         zIndex: true
+      })
+
+      // Add edge reducer for dynamic edge coloring
+      sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
+        const relationshipType = data.relationshipType || data.label || 'default'
+        const baseColor = getEdgeColor(relationshipType)
+
+        // Make edge brighter when highlighted
+        const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
+
+        return {
+          ...data,
+          color: color
+        }
       })
 
       // Add all the event handlers
@@ -229,9 +296,10 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
     // Add edge hover effects for better highlighting (GPU-optimized)
     sigmaRef.current.on("enterEdge", (event) => {
       const edge = graph.getEdgeAttributes(event.edge)
-      // Highlight the edge by making it thicker and brighter
+      // Highlight the edge by making it thicker and store original size
+      graph.setEdgeAttribute(event.edge, "originalSize", edge.size || 2)
       graph.setEdgeAttribute(event.edge, "size", 4)
-      graph.setEdgeAttribute(event.edge, "color", edge.originalColor + "FF") // Full opacity for highlight
+      graph.setEdgeAttribute(event.edge, "highlighted", true)
       // Use requestAnimationFrame for smooth GPU rendering
       requestAnimationFrame(() => {
         sigmaRef.current?.refresh()
@@ -241,8 +309,8 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
     sigmaRef.current.on("leaveEdge", (event) => {
       const edge = graph.getEdgeAttributes(event.edge)
       // Reset edge to original appearance
-      graph.setEdgeAttribute(event.edge, "size", 2)
-      graph.setEdgeAttribute(event.edge, "color", edge.originalColor)
+      graph.setEdgeAttribute(event.edge, "size", edge.originalSize || 2)
+      graph.setEdgeAttribute(event.edge, "highlighted", false)
       // Use requestAnimationFrame for smooth GPU rendering
       requestAnimationFrame(() => {
         sigmaRef.current?.refresh()
@@ -297,30 +365,14 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
       })
     })
 
-    // Add edges with better styling
+    // Add edges
     apiData.edges.forEach((edge) => {
       if (graph.hasNode(edge.source) && graph.hasNode(edge.target)) {
-        // Get edge color based on relationship type
-        const getEdgeColor = (type: string): string => {
-          const edgeColors = {
-            'HAS_ENCOUNTER': '#3b82f6',
-            'HAS_SYMPTOM': '#ef4444',
-            'DIAGNOSED_WITH': '#dc2626',
-            'PRESCRIBED': '#06b6d4',
-            'PERFORMED': '#f97316',
-            'TESTED_FOR': '#8b5cf6',
-            'TREATED_BY': '#10b981',
-            default: '#64748b'
-          }
-          return edgeColors[type as keyof typeof edgeColors] || edgeColors.default
-        }
-
         graph.addEdge(edge.source, edge.target, {
           id: edge.id,
           label: edge.type,
-          color: getEdgeColor(edge.type),
+          relationshipType: edge.type, // Store relationship type for edge reducer
           size: 2,
-          originalColor: getEdgeColor(edge.type),
           properties: edge.properties
         })
       }
@@ -375,7 +427,6 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
       sigmaRef.current = new Sigma(graph, vizRef.current, {
         renderEdgeLabels: true,
         defaultNodeColor: "#6b7280",
-        defaultEdgeColor: "#94a3b8",
         labelColor: { color: "#374151" },
         labelSize: 10,
         labelWeight: "600",
@@ -383,14 +434,27 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
         edgeLabelSize: 12,
         edgeLabelWeight: "600",
         edgeLabelFont: "Inter, Arial, sans-serif",
-        // GPU-friendly performance optimizations
-        performanceMode: true,
+        // GPU-friendly performance options (type-safe subset)
         allowInvalidContainer: false,
         hideLabelsOnMove: true,
         hideEdgesOnMove: true,
         labelGridCellSize: 100,
         labelDensity: 1,
         zIndex: true
+      })
+
+      // Add edge reducer for dynamic edge coloring
+      sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
+        const relationshipType = data.relationshipType || data.label || 'default'
+        const baseColor = getEdgeColor(relationshipType)
+
+        // Make edge brighter when highlighted
+        const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
+
+        return {
+          ...data,
+          color: color
+        }
       })
 
       // Add all the event handlers
@@ -450,47 +514,63 @@ export function GraphVisualization({ data }: GraphVisualizationProps) {
   }
 
   const handleNodeTypesChange = (nodeTypes: string[]): void => {
-    setFilters(prev => ({
-      ...prev,
-      nodes: {
-        ...prev.nodes,
-        nodeTypes,
-        showAll: false
-      }
-    }))
+    if (onNodeTypesChange) {
+      onNodeTypesChange(nodeTypes)
+    } else {
+      setLocalFilters((prev: GraphFiltersType) => ({
+        ...prev,
+        nodes: {
+          ...prev.nodes,
+          nodeTypes,
+          showAll: false
+        }
+      }))
+    }
   }
 
   const handleShowAllNodesChange = (showAll: boolean): void => {
-    setFilters(prev => ({
-      ...prev,
-      nodes: {
-        ...prev.nodes,
-        showAll,
-        nodeTypes: showAll ? availableNodeTypes : prev.nodes.nodeTypes
-      }
-    }))
+    if (onShowAllNodesChange) {
+      onShowAllNodesChange(showAll)
+    } else {
+      setLocalFilters((prev: GraphFiltersType) => ({
+        ...prev,
+        nodes: {
+          ...prev.nodes,
+          showAll,
+          nodeTypes: showAll ? availableNodeTypes : prev.nodes.nodeTypes
+        }
+      }))
+    }
   }
 
   const handleRelationshipTypesChange = (relationshipTypes: string[]): void => {
-    setFilters(prev => ({
-      ...prev,
-      edges: {
-        ...prev.edges,
-        relationshipTypes,
-        showAll: false
-      }
-    }))
+    if (onRelationshipTypesChange) {
+      onRelationshipTypesChange(relationshipTypes)
+    } else {
+      setLocalFilters((prev: GraphFiltersType) => ({
+        ...prev,
+        edges: {
+          ...prev.edges,
+          relationshipTypes,
+          showAll: false
+        }
+      }))
+    }
   }
 
   const handleShowAllRelationshipsChange = (showAll: boolean): void => {
-    setFilters(prev => ({
-      ...prev,
-      edges: {
-        ...prev.edges,
-        showAll,
-        relationshipTypes: showAll ? availableRelationshipTypes : prev.edges.relationshipTypes
-      }
-    }))
+    if (onShowAllRelationshipsChange) {
+      onShowAllRelationshipsChange(showAll)
+    } else {
+      setLocalFilters((prev: GraphFiltersType) => ({
+        ...prev,
+        edges: {
+          ...prev.edges,
+          showAll,
+          relationshipTypes: showAll ? availableRelationshipTypes : prev.edges.relationshipTypes
+        }
+      }))
+    }
   }
 
   const showTooltip = (nodeId: string, nodeAttributes: any, pinned: boolean): void => {

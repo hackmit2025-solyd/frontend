@@ -10,10 +10,16 @@ import { QueryTranslation } from "@/components/query-translation"
 import { GraphVisualization } from "@/components/graph-visualization"
 import { StatusBar } from "@/components/status-bar"
 import { TopNavBar } from "@/components/top-nav-bar"
+import { useHipaa } from "@/components/hipaa-provider"
+import {
+  GraphFilters as GraphFiltersType,
+  createDefaultFilters,
+} from "@/lib/graph-filters"
 
 export default function HealthcareDashboard() {
   const [query, setQuery] = useState("")
   const [showTranslation, setShowTranslation] = useState(false)
+  const { hipaaEnabled } = useHipaa()
   // Split view state
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -25,6 +31,57 @@ export default function HealthcareDashboard() {
   const [graphData, setGraphData] = useState<any>(null)
   const [searchLoading, setSearchLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
+
+  // Shared filter state for both graph instances
+  const [filters, setFilters] = useState<GraphFiltersType>(createDefaultFilters())
+  const [availableNodeTypes, setAvailableNodeTypes] = useState<string[]>([])
+  const [availableRelationshipTypes, setAvailableRelationshipTypes] = useState<string[]>([])
+  const [filtersOpen, setFiltersOpen] = useState(false)
+
+  // Filter handler functions
+  const handleNodeTypesChange = (nodeTypes: string[]): void => {
+    setFilters(prev => ({
+      ...prev,
+      nodes: {
+        ...prev.nodes,
+        nodeTypes,
+        showAll: false
+      }
+    }))
+  }
+
+  const handleShowAllNodesChange = (showAll: boolean): void => {
+    setFilters(prev => ({
+      ...prev,
+      nodes: {
+        ...prev.nodes,
+        showAll,
+        nodeTypes: showAll ? availableNodeTypes : prev.nodes.nodeTypes
+      }
+    }))
+  }
+
+  const handleRelationshipTypesChange = (relationshipTypes: string[]): void => {
+    setFilters(prev => ({
+      ...prev,
+      edges: {
+        ...prev.edges,
+        relationshipTypes,
+        showAll: false
+      }
+    }))
+  }
+
+  const handleShowAllRelationshipsChange = (showAll: boolean): void => {
+    setFilters(prev => ({
+      ...prev,
+      edges: {
+        ...prev.edges,
+        showAll,
+        relationshipTypes: showAll ? availableRelationshipTypes : prev.edges.relationshipTypes
+      }
+    }))
+  }
 
   const handleSearch = async () => {
     setSearchLoading(true)
@@ -55,12 +112,18 @@ export default function HealthcareDashboard() {
 
       if (queryGraphResponse.ok) {
         const graphData = await queryGraphResponse.json()
+        console.log("Query Graph Response Data:", graphData)
+        console.log("Nodes count:", graphData.nodes?.length || 0)
+        console.log("Edges count:", graphData.edges?.length || 0)
+        console.log("Sample nodes:", graphData.nodes?.slice(0, 3))
+        console.log("Sample edges:", graphData.edges?.slice(0, 3))
         setGraphData(graphData)
       } else {
         const errorData = await queryGraphResponse.json()
         console.error("Query graph search failed:", errorData)
       }
 
+      /*
       // Call the original search API route
       const searchResponse = await fetch("/api/search", {
         method: "POST",
@@ -75,6 +138,7 @@ export default function HealthcareDashboard() {
         const errorData = await searchResponse.json()
         console.error("Search failed:", errorData)
       }
+      */
 
       // Log the search action (existing functionality)
       await fetch("/api/actions", {
@@ -88,7 +152,7 @@ export default function HealthcareDashboard() {
           query,
           status: "completed",
           resultSummary: "Viewing cohort and graph",
-          details: { viewMode: "split", query_id },
+          details: { viewMode: "split", query_id, hipaaEnabled },
         }),
       })
     } catch {
@@ -132,11 +196,11 @@ export default function HealthcareDashboard() {
   }, [isDragging])
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-16">
+    <div className="min-h-screen bg-background text-foreground pb-0 flex flex-col">
       {/* Top Navigation */}
       <TopNavBar />
 
-      <div className="flex">
+      <div className="flex-1 min-h-0 flex">
         {/* Main Content */}
         <main className="flex-1 p-6 flex flex-col min-h-0">
           {/* Search Bar */}
@@ -225,7 +289,22 @@ export default function HealthcareDashboard() {
                     <Maximize2 className="h-4 w-4" />
                   </Button>
                   <div className="h-full overflow-auto">
-                    <GraphVisualization key="split-view" data={graphData} />
+                    <GraphVisualization
+                      key="shared"
+                      data={graphData}
+                      filters={filters}
+                      availableNodeTypes={availableNodeTypes}
+                      availableRelationshipTypes={availableRelationshipTypes}
+                      filtersOpen={filtersOpen}
+                      onFiltersChange={setFilters}
+                      onAvailableNodeTypesChange={setAvailableNodeTypes}
+                      onAvailableRelationshipTypesChange={setAvailableRelationshipTypes}
+                      onFiltersOpenChange={setFiltersOpen}
+                      onNodeTypesChange={handleNodeTypesChange}
+                      onShowAllNodesChange={handleShowAllNodesChange}
+                      onRelationshipTypesChange={handleRelationshipTypesChange}
+                      onShowAllRelationshipsChange={handleShowAllRelationshipsChange}
+                    />
                   </div>
                 </div>
               </div>
@@ -248,7 +327,22 @@ export default function HealthcareDashboard() {
               <X className="h-4 w-4" />
             </Button>
             <div className="h-full overflow-auto">
-              <GraphVisualization key="fullscreen" data={graphData} />
+              <GraphVisualization
+                key="shared"
+                data={graphData}
+                filters={filters}
+                availableNodeTypes={availableNodeTypes}
+                availableRelationshipTypes={availableRelationshipTypes}
+                filtersOpen={filtersOpen}
+                onFiltersChange={setFilters}
+                onAvailableNodeTypesChange={setAvailableNodeTypes}
+                onAvailableRelationshipTypesChange={setAvailableRelationshipTypes}
+                onFiltersOpenChange={setFiltersOpen}
+                onNodeTypesChange={handleNodeTypesChange}
+                onShowAllNodesChange={handleShowAllNodesChange}
+                onRelationshipTypesChange={handleRelationshipTypesChange}
+                onShowAllRelationshipsChange={handleShowAllRelationshipsChange}
+              />
             </div>
           </div>
         </div>

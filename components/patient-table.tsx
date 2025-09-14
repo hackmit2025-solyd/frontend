@@ -85,7 +85,7 @@ export function PatientTable() {
                     <p className="text-sm text-muted-foreground">{patient.pcp}</p>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 min-w-0">
                     <div className="flex flex-wrap gap-1">
                       {patient.flags.map((flag, index) => (
                         <Badge key={index} variant="destructive" className="text-xs">
@@ -93,12 +93,12 @@ export function PatientTable() {
                         </Badge>
                       ))}
                     </div>
-                    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                      <Button size="sm" variant="outline">
+                    <div className="flex flex-wrap gap-1 max-w-full" onClick={(e) => e.stopPropagation()}>
+                      <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap">
                         <Calendar className="h-3 w-3 mr-1" />
                         Schedule
                       </Button>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap">
                         <Phone className="h-3 w-3 mr-1" />
                         Call
                       </Button>
