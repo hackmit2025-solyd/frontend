@@ -1,6 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export interface NodeTooltipData {
@@ -21,6 +22,10 @@ interface NodeTooltipProps {
   containerRect?: DOMRect
   onMouseEnter?: () => void
   onMouseLeave?: () => void
+  onBeginTraversal?: (nodeId: string) => void
+  onStopTraversal?: () => void
+  traversalActive?: boolean
+  isTraversalCenter?: boolean
 }
 
 const formatPropertyValue = (key: string, value: any): string => {
@@ -54,7 +59,18 @@ const formatPropertyKey = (key: string): string => {
     .join(" ")
 }
 
-export function NodeTooltip({ data, visible, pinned, containerRect, onMouseEnter, onMouseLeave }: NodeTooltipProps) {
+export function NodeTooltip({
+  data,
+  visible,
+  pinned,
+  containerRect,
+  onMouseEnter,
+  onMouseLeave,
+  onBeginTraversal,
+  onStopTraversal,
+  traversalActive,
+  isTraversalCenter
+}: NodeTooltipProps) {
   if (!visible || !data) {
     return null
   }
@@ -142,6 +158,38 @@ export function NodeTooltip({ data, visible, pinned, containerRect, onMouseEnter
             {Object.keys(data.properties || {}).length > displayProperties.length && (
               <div className="text-muted-foreground italic">
                 +{Object.keys(data.properties || {}).length - displayProperties.length} more properties...
+              </div>
+            )}
+
+            {/* Traversal Actions */}
+            {pinned && onBeginTraversal && onStopTraversal && (
+              <div className="border-t pt-3 mt-3">
+                <div className="flex gap-2">
+                  {!traversalActive && (
+                    <Button
+                      size="sm"
+                      onClick={() => onBeginTraversal(data.id)}
+                      className="flex-1 text-xs h-7"
+                    >
+                      Begin Edge Traversal
+                    </Button>
+                  )}
+                  {traversalActive && (
+                    <Button
+                      size="sm"
+                      variant={isTraversalCenter ? "destructive" : "outline"}
+                      onClick={onStopTraversal}
+                      className="flex-1 text-xs h-7"
+                    >
+                      {isTraversalCenter ? "Stop Traversal" : "End Traversal"}
+                    </Button>
+                  )}
+                </div>
+                {traversalActive && isTraversalCenter && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Traversal center • Showing connected nodes
+                  </div>
+                )}
               </div>
             )}
           </div>

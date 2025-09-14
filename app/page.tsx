@@ -107,6 +107,7 @@ export default function HealthcareDashboard() {
         body: JSON.stringify({
           query,
           limit: 50,
+          hipaa: hipaaEnabled,
         }),
       })
 

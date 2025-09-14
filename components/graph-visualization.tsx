@@ -117,6 +117,24 @@ export function GraphVisualization({
   const setFiltersOpen = onFiltersOpenChange ?? setLocalFiltersOpen
   const [visibleStats, setVisibleStats] = useState({ nodes: 0, edges: 0 })
   const [legendVisible, setLegendVisible] = useState(true)
+
+  // Edge traversal state
+  const [traversalState, setTraversalState] = useState<{
+    active: boolean
+    centerNodeId: string | null
+    degree: number
+    revealedNodes: Set<string>
+    revealedEdges: Set<string>
+  }>({
+    active: false,
+    centerNodeId: null,
+    degree: 1,
+    revealedNodes: new Set(),
+    revealedEdges: new Set()
+  })
+
+  // Store full dataset for traversals
+  const fullGraphRef = useRef<MultiGraph | null>(null)
   const [tooltipData, setTooltipData] = useState<NodeTooltipData | null>(null)
   const [tooltipVisible, setTooltipVisible] = useState(false)
   const [tooltipPinned, setTooltipPinned] = useState(false)
@@ -138,6 +156,138 @@ export function GraphVisualization({
       default: "#6b7280"
     }
     return colors[label as keyof typeof colors] || colors.default
+  }
+
+  // Traversal algorithm: find nodes within N degrees
+  const findNodesWithinDegrees = (centerNodeId: string, degree: number, fullGraph: MultiGraph): { nodes: Set<string>, edges: Set<string> } => {
+    if (!fullGraph || !fullGraph.hasNode(centerNodeId)) {
+      return { nodes: new Set(), edges: new Set() }
+    }
+
+    const visitedNodes = new Set<string>([centerNodeId])
+    const connectedEdges = new Set<string>()
+    const currentLevel = new Set<string>([centerNodeId])
+
+    // BFS traversal for N degrees
+    for (let currentDegree = 0; currentDegree < degree; currentDegree++) {
+      const nextLevel = new Set<string>()
+
+      for (const nodeId of currentLevel) {
+        // Get all neighbors of current node
+        const neighbors = fullGraph.neighbors(nodeId)
+
+        // Get all edges connected to this node
+        const nodeEdges = fullGraph.edges(nodeId)
+
+        for (const edge of nodeEdges) {
+          const edgeData = fullGraph.getEdgeAttributes(edge)
+          // Apply global filters to edges
+          if (shouldShowEdgeType(edgeData.relationshipType || edgeData.label || 'default')) {
+            connectedEdges.add(edge)
+
+            // Add connected nodes if they pass node filters
+            const [source, target] = fullGraph.extremities(edge)
+            const targetNode = source === nodeId ? target : source
+            const targetData = fullGraph.getNodeAttributes(targetNode)
+
+            if (shouldShowNodeType(targetData.properties?.nodeType || 'Unknown')) {
+              visitedNodes.add(targetNode)
+              if (currentDegree < degree - 1) {
+                nextLevel.add(targetNode)
+              }
+            }
+          }
+        }
+      }
+
+      currentLevel.clear()
+      nextLevel.forEach(node => currentLevel.add(node))
+    }
+
+    return { nodes: visitedNodes, edges: connectedEdges }
+  }
+
+  // Helper functions to check if node/edge should be shown based on filters
+  const shouldShowNodeType = (nodeType: string): boolean => {
+    if (filters.nodes.showAll) return true
+    return filters.nodes.nodeTypes.includes(nodeType)
+  }
+
+  const shouldShowEdgeType = (edgeType: string): boolean => {
+    if (filters.edges.showAll) return true
+    return filters.edges.relationshipTypes.includes(edgeType)
+  }
+
+  // Start edge traversal from a node
+  const beginEdgeTraversal = (nodeId: string): void => {
+    if (!fullGraphRef.current) return
+
+    const traversalResult = findNodesWithinDegrees(nodeId, 1, fullGraphRef.current)
+
+    setTraversalState({
+      active: true,
+      centerNodeId: nodeId,
+      degree: 1,
+      revealedNodes: traversalResult.nodes,
+      revealedEdges: traversalResult.edges
+    })
+
+    // Refresh the graph to show newly revealed nodes/edges
+    if (sigmaRef.current) {
+      sigmaRef.current.refresh()
+    }
+  }
+
+  // Stop edge traversal
+  const stopEdgeTraversal = (): void => {
+    setTraversalState({
+      active: false,
+      centerNodeId: null,
+      degree: 1,
+      revealedNodes: new Set(),
+      revealedEdges: new Set()
+    })
+
+    // Refresh the graph to hide traversal-revealed nodes/edges
+    if (sigmaRef.current) {
+      sigmaRef.current.refresh()
+    }
+  }
+
+  // Check if a node should be visible (considering query filters + traversal)
+  const isNodeVisible = (nodeId: string): boolean => {
+    if (!graphRef.current) return false
+
+    const nodeData = graphRef.current.getNodeAttributes(nodeId)
+    const nodeType = nodeData.properties?.nodeType || 'Unknown'
+
+    // Apply global filters
+    if (!shouldShowNodeType(nodeType)) return false
+
+    // If traversal is active, only show nodes in the revealed set or originally visible
+    if (traversalState.active) {
+      return traversalState.revealedNodes.has(nodeId) || !graphRef.current.hasNode(nodeId)
+    }
+
+    return true
+  }
+
+  // Check if an edge should be visible (considering query filters + traversal)
+  const isEdgeVisible = (edgeId: string): boolean => {
+    if (!graphRef.current) return false
+
+    const edgeData = graphRef.current.getEdgeAttributes(edgeId)
+    const edgeType = edgeData.relationshipType || edgeData.label || 'default'
+
+    // Apply global filters
+    if (!shouldShowEdgeType(edgeType)) return false
+
+    // If traversal is active, only show edges in the revealed set or originally visible
+    if (traversalState.active) {
+      return traversalState.revealedEdges.has(edgeId) || !graphRef.current.hasEdge(edgeId)
+    }
+
+    return true
   }
 
   const fetchGraphData = async (): Promise<ApiResponse> => {
@@ -171,6 +321,10 @@ export function GraphVisualization({
       }
 
       const graph = createGraphFromApiData(apiData)
+
+      // Store full graph for traversals
+      const fullGraph = createGraphFromApiData(apiData)
+      fullGraphRef.current = fullGraph
       graphRef.current = graph
 
       // Extract available types for filters
@@ -213,17 +367,44 @@ export function GraphVisualization({
         zIndex: true
       })
 
-      // Add edge reducer for dynamic edge coloring
+      // Add edge reducer for dynamic edge coloring and visibility
       sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
         const relationshipType = data.relationshipType || data.label || 'default'
         const baseColor = getEdgeColor(relationshipType)
+
+        // Check if edge should be visible
+        const visible = isEdgeVisible(edge)
 
         // Make edge brighter when highlighted
         const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
 
         return {
           ...data,
-          color: color
+          color: color,
+          hidden: !visible
+        }
+      })
+
+      // Add node reducer for dynamic visibility and traversal highlighting
+      sigmaRef.current.setSetting('nodeReducer', (node: string, data: any) => {
+        const visible = isNodeVisible(node)
+        const isTraversalCenter = traversalState.active && traversalState.centerNodeId === node
+        const isTraversalRevealed = traversalState.active && traversalState.revealedNodes.has(node) && node !== traversalState.centerNodeId
+
+        // Highlight traversal center node
+        const size = data.size || 12
+        const finalSize = isTraversalCenter ? size * 1.5 : size
+
+        // Add border for traversal-revealed nodes
+        const borderColor = isTraversalCenter ? '#ff6b35' : (isTraversalRevealed ? '#4ade80' : undefined)
+        const borderWidth = (isTraversalCenter || isTraversalRevealed) ? 3 : 0
+
+        return {
+          ...data,
+          size: finalSize,
+          borderColor: borderColor,
+          borderWidth: borderWidth,
+          hidden: !visible
         }
       })
 
@@ -401,6 +582,10 @@ export function GraphVisualization({
 
       const apiData = await fetchGraphData()
       const graph = createGraphFromApiData(apiData)
+
+      // Store full graph for traversals
+      const fullGraph = createGraphFromApiData(apiData)
+      fullGraphRef.current = fullGraph
       graphRef.current = graph
 
       // Extract available types for filters
@@ -443,17 +628,44 @@ export function GraphVisualization({
         zIndex: true
       })
 
-      // Add edge reducer for dynamic edge coloring
+      // Add edge reducer for dynamic edge coloring and visibility
       sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
         const relationshipType = data.relationshipType || data.label || 'default'
         const baseColor = getEdgeColor(relationshipType)
+
+        // Check if edge should be visible
+        const visible = isEdgeVisible(edge)
 
         // Make edge brighter when highlighted
         const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
 
         return {
           ...data,
-          color: color
+          color: color,
+          hidden: !visible
+        }
+      })
+
+      // Add node reducer for dynamic visibility and traversal highlighting
+      sigmaRef.current.setSetting('nodeReducer', (node: string, data: any) => {
+        const visible = isNodeVisible(node)
+        const isTraversalCenter = traversalState.active && traversalState.centerNodeId === node
+        const isTraversalRevealed = traversalState.active && traversalState.revealedNodes.has(node) && node !== traversalState.centerNodeId
+
+        // Highlight traversal center node
+        const size = data.size || 12
+        const finalSize = isTraversalCenter ? size * 1.5 : size
+
+        // Add border for traversal-revealed nodes
+        const borderColor = isTraversalCenter ? '#ff6b35' : (isTraversalRevealed ? '#4ade80' : undefined)
+        const borderWidth = (isTraversalCenter || isTraversalRevealed) ? 3 : 0
+
+        return {
+          ...data,
+          size: finalSize,
+          borderColor: borderColor,
+          borderWidth: borderWidth,
+          hidden: !visible
         }
       })
 
@@ -843,6 +1055,10 @@ export function GraphVisualization({
             containerRect={containerRect || undefined}
             onMouseEnter={handleTooltipMouseEnter}
             onMouseLeave={handleTooltipMouseLeave}
+            onBeginTraversal={beginEdgeTraversal}
+            onStopTraversal={stopEdgeTraversal}
+            traversalActive={traversalState.active}
+            isTraversalCenter={tooltipData?.id === traversalState.centerNodeId}
           />
 
           {/* Legend */}
