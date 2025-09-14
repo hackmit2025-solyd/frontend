@@ -7,6 +7,7 @@ import { Network, ZoomIn, ZoomOut, RotateCcw, Filter, Eye, EyeOff } from "lucide
 import { MultiGraph } from "graphology"
 import { GraphFilters } from "@/components/graph-filters"
 import { NodeTooltip, NodeTooltipData } from "@/components/node-tooltip"
+import { useCohort, type CohortPatient } from "@/components/cohort-provider"
 import {
   GraphFilters as GraphFiltersType,
   createDefaultFilters,
@@ -98,6 +99,7 @@ export function GraphVisualization({
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { addPatient } = useCohort()
   const [sigmaLoaded, setSigmaLoaded] = useState(false)
 
   // Use props if provided, otherwise use local state
@@ -449,14 +451,14 @@ export function GraphVisualization({
     if (!sigmaRef.current) return
 
     // Add hover and click events for tooltip
-    sigmaRef.current.on("enterNode", (event) => {
+    sigmaRef.current.on("enterNode", (event: any) => {
       const node = graph.getNodeAttributes(event.node)
       if (!tooltipPinned) {
         showTooltip(event.node, node, false)
       }
     })
 
-    sigmaRef.current.on("leaveNode", (event) => {
+    sigmaRef.current.on("leaveNode", (event: any) => {
       // Clear any existing timeout
       if (leaveTimeoutRef.current) {
         clearTimeout(leaveTimeoutRef.current)
@@ -473,7 +475,7 @@ export function GraphVisualization({
       }
     })
 
-    sigmaRef.current.on("clickNode", (event) => {
+    sigmaRef.current.on("clickNode", (event: any) => {
       // Clear any pending hide timeout
       if (leaveTimeoutRef.current) {
         clearTimeout(leaveTimeoutRef.current)
@@ -493,7 +495,7 @@ export function GraphVisualization({
     })
 
     // Add edge hover effects for better highlighting (GPU-optimized)
-    sigmaRef.current.on("enterEdge", (event) => {
+    sigmaRef.current.on("enterEdge", (event: any) => {
       const edge = graph.getEdgeAttributes(event.edge)
       // Highlight the edge by making it thicker and store original size
       graph.setEdgeAttribute(event.edge, "originalSize", edge.size || 2)
@@ -505,7 +507,7 @@ export function GraphVisualization({
       })
     })
 
-    sigmaRef.current.on("leaveEdge", (event) => {
+    sigmaRef.current.on("leaveEdge", (event: any) => {
       const edge = graph.getEdgeAttributes(event.edge)
       // Reset edge to original appearance
       graph.setEdgeAttribute(event.edge, "size", edge.originalSize || 2)
@@ -880,6 +882,24 @@ export function GraphVisualization({
     }
   }
 
+  const handleAddPatient = (node: NodeTooltipData): void => {
+    // Build a CohortPatient from node data
+    const props = node.properties || {}
+    const patient: CohortPatient = {
+      id: String(node.id),
+      displayName: node.label || String(node.id),
+      dob: props.dob || props.date_of_birth || props.birthDate || props.birth_date || undefined,
+      sex: props.sex || props.gender || undefined,
+      pcp: props.pcp || props.primaryCareProvider || props.provider || undefined,
+      policy: props.policy || props.coverage || undefined,
+      notes: undefined,
+      contactPhone: props.phone || props.contactPhone || undefined,
+      contactEmail: props.email || props.contactEmail || undefined,
+      properties: props,
+    }
+    addPatient(patient)
+  }
+
   // Watch for data prop changes
   useEffect(() => {
     if (data && vizRef.current) {
@@ -1085,6 +1105,7 @@ export function GraphVisualization({
             onStopTraversal={stopEdgeTraversal}
             traversalActive={traversalState.active}
             isTraversalCenter={tooltipData?.id === traversalState.centerNodeId}
+            onAddPatient={handleAddPatient}
           />
 
           {/* Legend */}

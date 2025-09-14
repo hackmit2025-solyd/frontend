@@ -26,6 +26,7 @@ interface NodeTooltipProps {
   onStopTraversal?: () => void
   traversalActive?: boolean
   isTraversalCenter?: boolean
+  onAddPatient?: (node: NodeTooltipData) => void
 }
 
 const formatPropertyValue = (key: string, value: any): string => {
@@ -69,7 +70,8 @@ export function NodeTooltip({
   onBeginTraversal,
   onStopTraversal,
   traversalActive,
-  isTraversalCenter
+  isTraversalCenter,
+  onAddPatient
 }: NodeTooltipProps) {
   if (!visible || !data) {
     return null
@@ -158,6 +160,14 @@ export function NodeTooltip({
             {Object.keys(data.properties || {}).length > displayProperties.length && (
               <div className="text-muted-foreground italic">
                 +{Object.keys(data.properties || {}).length - displayProperties.length} more properties...
+              </div>
+            )}
+
+            {pinned && data.nodeType === 'Patient' && onAddPatient && (
+              <div className="pt-2 mt-2 border-t">
+                <Button size="sm" className="w-full h-8 text-xs" onClick={() => onAddPatient(data)}>
+                  Add Patient to Cohort
+                </Button>
               </div>
             )}
 

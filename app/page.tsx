@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Search, Maximize2, X } from "lucide-react"
+import { Search, Maximize2, X, Bot } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
@@ -29,7 +29,9 @@ export default function HealthcareDashboard() {
   const [graphFullscreen, setGraphFullscreen] = useState(false)
 
   const [graphData, setGraphData] = useState<any>(null)
+  const [cypherUsed, setCypherUsed] = useState<string>("")
   const [searchLoading, setSearchLoading] = useState(false)
+  const [agentLoading, setAgentLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
 
   // Shared filter state for both graph instances
@@ -101,13 +103,12 @@ export default function HealthcareDashboard() {
 
     try {
       // Call the query-graph API endpoint
-      const queryGraphResponse = await fetch("/api/search/query-graph", {
+      const queryGraphResponse = await fetch(`/api/search/query-graph?hipaa=${hipaaEnabled}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           query,
           limit: 50,
-          hipaa: hipaaEnabled,
         }),
       })
 
@@ -119,6 +120,13 @@ export default function HealthcareDashboard() {
         console.log("Sample nodes:", graphData.nodes?.slice(0, 3))
         console.log("Sample edges:", graphData.edges?.slice(0, 3))
         setGraphData(graphData)
+        // Extract cypher-used from response for display
+        const cypher = (graphData && (graphData["cypher-used"] ?? graphData["cypher_used"] ?? graphData["cypherUsed"]))
+        if (cypher) {
+          setCypherUsed(typeof cypher === 'string' ? cypher : JSON.stringify(cypher, null, 2))
+        } else {
+          setCypherUsed("")
+        }
       } else {
         const errorData = await queryGraphResponse.json()
         console.error("Query graph search failed:", errorData)
@@ -169,6 +177,39 @@ export default function HealthcareDashboard() {
     }
   }
 
+  const handleSearchAgent = async () => {
+    // First, perform the regular search to get the graph data
+    await handleSearch()
+
+    // Then call the LLM route with the graph data
+    setAgentLoading(true)
+    const agent_id = Math.floor(Math.random() * 1000000) // Generate random integer UUID
+
+    try {
+      const llmResponse = await fetch("/api/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uuid: agent_id,
+          query,
+          graphData,
+        }),
+      })
+
+      if (llmResponse.ok) {
+        const llmData = await llmResponse.json()
+        console.log("LLM Response:", llmData)
+      } else {
+        const errorData = await llmResponse.json()
+        console.error("LLM request failed:", errorData)
+      }
+    } catch (error) {
+      console.error("LLM request error:", error)
+    } finally {
+      setAgentLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!isDragging) return
     const onMove = (e: MouseEvent | TouchEvent) => {
@@ -212,17 +253,28 @@ export default function HealthcareDashboard() {
                 placeholder="Ask me anything about your patients..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="pl-10 text-base h-12"
+                className="pl-10 pr-44 text-base h-12"
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               />
-              <Button
-                onClick={handleSearch}
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-                size="sm"
-                disabled={searchLoading}
-              >
-                {searchLoading ? "Searching..." : "Search"}
-              </Button>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-2">
+                <Button
+                  onClick={handleSearch}
+                  size="sm"
+                  disabled={searchLoading || agentLoading}
+                  variant="outline"
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  {searchLoading ? "Searching..." : "Search"}
+                </Button>
+                <Button
+                  onClick={handleSearchAgent}
+                  size="sm"
+                  disabled={searchLoading || agentLoading}
+                >
+                  <Bot className="h-4 w-4 mr-2" />
+                  {agentLoading ? "Agent Working..." : "Search & Agent"}
+                </Button>
+              </div>
             </div>
 
             {/* Loading Bar */}
@@ -246,7 +298,7 @@ export default function HealthcareDashboard() {
           {showTranslation && (
             <QueryTranslation
               naturalLanguage={query}
-              cypherQuery={""}
+              cypherQuery={cypherUsed}
             />
           )}
 

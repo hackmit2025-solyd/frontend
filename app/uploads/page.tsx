@@ -230,7 +230,7 @@ export default function UploadsPage() {
 
         // Create a timeout promise
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+          setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 300000)
         )
 
         // Upload to PDF ingest API with timeout

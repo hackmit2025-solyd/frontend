@@ -2,41 +2,13 @@ import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Calendar, Phone, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react"
-
-const mockPatients = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    policy: "Policy X - Premium",
-    lastEncounter: "2024-01-15",
-    labs: "Routine labs reviewed",
-    pcp: "Dr. Smith",
-    flags: ["Follow-up recommended"],
-  },
-  {
-    id: 2,
-    name: "Michael Chen",
-    policy: "Policy X - Standard",
-    lastEncounter: "2023-11-20",
-    labs: "Labs pending",
-    pcp: "Dr. Johnson",
-    flags: ["No recent contact"],
-  },
-  {
-    id: 3,
-    name: "Emily Rodriguez",
-    policy: "Policy X - Premium",
-    lastEncounter: "2024-02-01",
-    labs: "Vitals within normal range",
-    pcp: "Dr. Williams",
-    flags: ["Medication adherence"],
-  },
-]
+import { Calendar, Phone, AlertTriangle, ChevronDown, ChevronUp, Trash2 } from "lucide-react"
+import { useCohort } from "@/components/cohort-provider"
 
 export function PatientTable() {
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-  const toggle = (id: number) => setExpandedId((prev) => (prev === id ? null : id))
+  const { patients, removePatient } = useCohort()
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const toggle = (id: string) => setExpandedId((prev) => (prev === id ? null : id))
 
   return (
     <Card>
@@ -45,11 +17,14 @@ export function PatientTable() {
           <AlertTriangle className="h-5 w-5 text-primary" />
           Patient Cohort
         </CardTitle>
-        <p className="text-sm text-muted-foreground">Found 3 patients in the current view</p>
+        <p className="text-sm text-muted-foreground">{patients.length} patient{patients.length === 1 ? '' : 's'} in cohort</p>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {mockPatients.map((patient) => {
+          {patients.length === 0 && (
+            <div className="text-sm text-muted-foreground">No patients in cohort yet. Add from the graph.</div>
+          )}
+          {patients.map((patient) => {
             const isOpen = expandedId === patient.id
             return (
               <div
@@ -57,42 +32,31 @@ export function PatientTable() {
                 className="border border-border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
                 onClick={() => toggle(patient.id)}
               >
-                <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
-                  <div className="md:col-span-2">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-center">
+                  <div className="md:col-span-2 min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-lg">{patient.name}</h3>
+                      <h3 className="font-semibold text-lg truncate">{patient.displayName}</h3>
                       {isOpen ? (
                         <ChevronUp className="h-4 w-4 text-muted-foreground" />
                       ) : (
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">{patient.policy}</p>
+                    {patient.policy && (
+                      <p className="text-sm text-muted-foreground truncate">{patient.policy}</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Date of Birth</p>
+                    <p className="text-sm text-muted-foreground">{patient.dob || "—"}</p>
                   </div>
 
                   <div>
-                    <p className="text-sm font-medium">Last Encounter</p>
-                    <p className="text-sm text-muted-foreground">{patient.lastEncounter}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium">Labs</p>
-                    <p className="text-sm text-muted-foreground">{patient.labs}</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-medium">PCP</p>
-                    <p className="text-sm text-muted-foreground">{patient.pcp}</p>
+                    <p className="text-sm font-medium">Sex</p>
+                    <p className="text-sm text-muted-foreground truncate">{patient.sex || "—"}</p>
                   </div>
 
                   <div className="space-y-2 min-w-0">
-                    <div className="flex flex-wrap gap-1">
-                      {patient.flags.map((flag, index) => (
-                        <Badge key={index} variant="destructive" className="text-xs">
-                          {flag}
-                        </Badge>
-                      ))}
-                    </div>
                     <div className="flex flex-wrap gap-1 max-w-full" onClick={(e) => e.stopPropagation()}>
                       <Button size="sm" variant="outline" className="shrink-0 whitespace-nowrap">
                         <Calendar className="h-3 w-3 mr-1" />
@@ -102,6 +66,16 @@ export function PatientTable() {
                         <Phone className="h-3 w-3 mr-1" />
                         Call
                       </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="shrink-0 whitespace-nowrap"
+                        onClick={() => removePatient(patient.id)}
+                        title="Remove from cohort"
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Remove
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -110,19 +84,18 @@ export function PatientTable() {
                   <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <h4 className="font-semibold mb-2">Contact</h4>
-                        <p className="text-sm text-muted-foreground">Primary: {patient.pcp}</p>
-                        <p className="text-sm text-muted-foreground">Phone: (555) 000-0000</p>
-                        <p className="text-sm text-muted-foreground">Email: patient@example.com</p>
+                        <h4 className="font-semibold mb-2">Demographics</h4>
+                        <p className="text-sm text-muted-foreground">Date of Birth: {patient.dob || "N/A"}</p>
+                        <p className="text-sm text-muted-foreground">Sex: {patient.sex || "N/A"}</p>
                       </div>
 
                       <div>
-                        <h4 className="font-semibold mb-2">Notes</h4>
-                        <p className="text-sm text-muted-foreground">{patient.labs}</p>
-                        <div className="flex gap-1 mt-2">
-                          <Badge variant="outline">Follow-up</Badge>
-                          <Badge variant="outline">Review</Badge>
-                        </div>
+                        <h4 className="font-semibold mb-2">Contact</h4>
+                        {patient.pcp && (
+                          <p className="text-sm text-muted-foreground">Primary: {patient.pcp}</p>
+                        )}
+                        <p className="text-sm text-muted-foreground">Phone: {patient.contactPhone || "N/A"}</p>
+                        <p className="text-sm text-muted-foreground">Email: {patient.contactEmail || "N/A"}</p>
                       </div>
                     </div>
                   </div>
@@ -130,7 +103,7 @@ export function PatientTable() {
               </div>
             )
           })}
-        </div>
+       </div>
       </CardContent>
     </Card>
   )

@@ -5,7 +5,6 @@ import { Search, Download, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ActionHistory } from "@/components/action-history"
-import { ActionStats } from "@/components/action-stats"
 import { TopNavBar } from "@/components/top-nav-bar"
 
 export default function ActionsPage() {
@@ -50,8 +49,7 @@ export default function ActionsPage() {
         </div>
 
 
-        {/* Stats Overview */}
-        <ActionStats />
+        {/* Stats Overview removed per request */}
 
         {/* Action History */}
         <ActionHistory searchQuery={searchQuery} />
