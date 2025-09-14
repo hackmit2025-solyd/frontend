@@ -248,10 +248,8 @@ export function GraphVisualization({
       revealedEdges: traversalResult.edges
     })
 
-    // Refresh the graph to show newly revealed nodes/edges
-    if (sigmaRef.current) {
-      sigmaRef.current.refresh()
-    }
+    // Apply filters to update reducers with new traversal state
+    applyFilters()
   }
 
   // Stop edge traversal
@@ -264,10 +262,8 @@ export function GraphVisualization({
       revealedEdges: new Set()
     })
 
-    // Refresh the graph to hide traversal-revealed nodes/edges
-    if (sigmaRef.current) {
-      sigmaRef.current.refresh()
-    }
+    // Apply filters to update reducers with cleared traversal state
+    applyFilters()
   }
 
   // Check if a node should be visible (considering query filters + traversal)
@@ -744,7 +740,46 @@ export function GraphVisualization({
   const applyFilters = (): void => {
     if (!graphRef.current || !sigmaRef.current) return
 
-    filterGraph(graphRef.current, filters)
+    // Recreate reducers with current filter state
+    sigmaRef.current.setSetting('nodeReducer', (node: string, data: any) => {
+      const visible = isNodeVisible(node)
+      const isTraversalCenter = traversalState.active && traversalState.centerNodeId === node
+      const isTraversalRevealed = traversalState.active && traversalState.revealedNodes.has(node) && node !== traversalState.centerNodeId
+
+      // Highlight traversal center node
+      const size = data.size || 12
+      const finalSize = isTraversalCenter ? size * 1.5 : size
+
+      // Add border for traversal-revealed nodes
+      const borderColor = isTraversalCenter ? '#ff6b35' : (isTraversalRevealed ? '#4ade80' : undefined)
+      const borderWidth = (isTraversalCenter || isTraversalRevealed) ? 3 : 0
+
+      return {
+        ...data,
+        size: finalSize,
+        borderColor: borderColor,
+        borderWidth: borderWidth,
+        hidden: !visible
+      }
+    })
+
+    sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
+      const relationshipType = data.relationshipType || data.label || 'default'
+      const baseColor = getEdgeColor(relationshipType)
+
+      // Check if edge should be visible
+      const visible = isEdgeVisible(edge)
+
+      // Make edge brighter when highlighted
+      const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
+
+      return {
+        ...data,
+        color: color,
+        hidden: !visible
+      }
+    })
+
     sigmaRef.current.refresh()
     updateVisibleStats(graphRef.current)
   }
