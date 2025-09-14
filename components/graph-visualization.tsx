@@ -7,6 +7,7 @@ import { Network, ZoomIn, ZoomOut, RotateCcw, Download, Filter, Eye, EyeOff } fr
 import Sigma from "sigma"
 import { MultiGraph } from "graphology"
 import { GraphFilters } from "@/components/graph-filters"
+import { NodeTooltip, NodeTooltipData } from "@/components/node-tooltip"
 import {
   GraphFilters as GraphFiltersType,
   createDefaultFilters,
@@ -55,6 +56,10 @@ export function GraphVisualization() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [visibleStats, setVisibleStats] = useState({ nodes: 0, edges: 0 })
   const [legendVisible, setLegendVisible] = useState(true)
+  const [tooltipData, setTooltipData] = useState<NodeTooltipData | null>(null)
+  const [tooltipVisible, setTooltipVisible] = useState(false)
+  const [tooltipPinned, setTooltipPinned] = useState(false)
+  const [containerRect, setContainerRect] = useState<DOMRect | null>(null)
 
   const getNodeColor = (label: string): string => {
     const colors = {
@@ -118,8 +123,13 @@ export function GraphVisualization() {
       // Add some randomness to avoid perfect circles
       const randomOffset = (Math.random() - 0.5) * 50
 
+      // Use properties.name for Test nodes, otherwise use display_name
+      const displayLabel = node.label === 'Test' && node.properties?.name
+        ? node.properties.name
+        : node.display_name
+
       graph.addNode(node.id, {
-        label: node.display_name,
+        label: displayLabel,
         x: Math.cos(angle) * radius + randomOffset,
         y: Math.sin(angle) * radius + randomOffset,
         size: node.label === 'Patient' ? 20 : node.label === 'Clinician' ? 18 : 12,
@@ -198,16 +208,37 @@ export function GraphVisualization() {
         edgeLabelWeight: "400"
       })
 
-      // Add hover events
+      // Add hover and click events for tooltip
       sigmaRef.current.on("enterNode", (event) => {
         const node = graph.getNodeAttributes(event.node)
-        console.log("Node hovered:", node)
+        if (!tooltipPinned) {
+          showTooltip(event.node, node, false)
+        }
+      })
+
+      sigmaRef.current.on("leaveNode", (event) => {
+        if (!tooltipPinned) {
+          hideTooltip()
+        }
       })
 
       sigmaRef.current.on("clickNode", (event) => {
         const node = graph.getNodeAttributes(event.node)
-        console.log("Node clicked:", node)
+        showTooltip(event.node, node, true)
+        setTooltipPinned(true)
       })
+
+      sigmaRef.current.on("clickStage", () => {
+        if (tooltipPinned) {
+          hideTooltip()
+          setTooltipPinned(false)
+        }
+      })
+
+      // Update container rect for tooltip positioning
+      if (vizRef.current) {
+        setContainerRect(vizRef.current.getBoundingClientRect())
+      }
 
       // Update visible stats
       updateVisibleStats(graph)
@@ -303,6 +334,43 @@ export function GraphVisualization() {
     }))
   }
 
+  const showTooltip = (nodeId: string, nodeAttributes: any, pinned: boolean): void => {
+    if (!sigmaRef.current || !vizRef.current) return
+
+    // Convert graph coordinates to screen coordinates
+    const screenPos = sigmaRef.current.graphToViewport({
+      x: nodeAttributes.x,
+      y: nodeAttributes.y
+    })
+
+    const tooltipData: NodeTooltipData = {
+      id: nodeId,
+      label: nodeAttributes.label || nodeId,
+      nodeType: nodeAttributes.properties?.nodeType || 'Unknown',
+      properties: nodeAttributes.properties || {},
+      x: screenPos.x,
+      y: screenPos.y,
+      graphX: nodeAttributes.x,
+      graphY: nodeAttributes.y
+    }
+
+    setTooltipData(tooltipData)
+    setTooltipVisible(true)
+    if (pinned) {
+      setTooltipPinned(true)
+    }
+  }
+
+  const hideTooltip = (): void => {
+    setTooltipVisible(false)
+    setTooltipPinned(false)
+    setTimeout(() => {
+      if (!tooltipVisible) {
+        setTooltipData(null)
+      }
+    }, 200)
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -336,8 +404,57 @@ export function GraphVisualization() {
     applyFilters()
   }, [filters])
 
+  // Update container rect on resize
+  useEffect(() => {
+    const updateContainerRect = () => {
+      if (vizRef.current) {
+        setContainerRect(vizRef.current.getBoundingClientRect())
+      }
+    }
+
+    const resizeObserver = new ResizeObserver(updateContainerRect)
+    if (vizRef.current) {
+      resizeObserver.observe(vizRef.current)
+    }
+
+    window.addEventListener('resize', updateContainerRect)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateContainerRect)
+    }
+  }, [])
+
+  // Update tooltip position on camera changes
+  useEffect(() => {
+    if (!sigmaRef.current) return
+
+    const handleCameraUpdate = () => {
+      if (tooltipVisible && tooltipData && !tooltipPinned && tooltipData.graphX !== undefined && tooltipData.graphY !== undefined) {
+        // Update tooltip position when camera moves during hover
+        const screenPos = sigmaRef.current!.graphToViewport({
+          x: tooltipData.graphX,
+          y: tooltipData.graphY
+        })
+        setTooltipData(prev => prev ? {
+          ...prev,
+          x: screenPos.x,
+          y: screenPos.y
+        } : null)
+      }
+    }
+
+    sigmaRef.current.getCamera().on('updated', handleCameraUpdate)
+
+    return () => {
+      if (sigmaRef.current) {
+        sigmaRef.current.getCamera().off('updated', handleCameraUpdate)
+      }
+    }
+  }, [tooltipVisible, tooltipData, tooltipPinned])
+
   return (
-    <Card>
+    <Card className="h-full flex flex-col">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -406,8 +523,8 @@ export function GraphVisualization() {
           </CollapsibleContent>
         </Collapsible>
       </CardHeader>
-      <CardContent>
-        <div className="relative h-96 bg-muted rounded-lg border-2 border-dashed border-border">
+      <CardContent className="flex-1 overflow-hidden">
+        <div className="relative h-full bg-muted rounded-lg border-2 border-dashed border-border">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-sm text-muted-foreground">Loading graph visualization...</div>
@@ -425,6 +542,14 @@ export function GraphVisualization() {
             ref={vizRef}
             className="absolute inset-0 w-full h-full"
             style={{ opacity: loading ? 0 : 1 }}
+          />
+
+          {/* Node Tooltip */}
+          <NodeTooltip
+            data={tooltipData}
+            visible={tooltipVisible}
+            pinned={tooltipPinned}
+            containerRect={containerRect || undefined}
           />
 
           {/* Legend */}

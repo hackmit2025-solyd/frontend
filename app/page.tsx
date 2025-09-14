@@ -97,7 +97,7 @@ export default function HealthcareDashboard() {
 
       <div className="flex">
         {/* Main Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 flex flex-col min-h-0">
           {/* Search Bar */}
           <div className="mb-6">
             <div className="relative">
@@ -124,8 +124,8 @@ export default function HealthcareDashboard() {
           )}
 
           {/* Split View: Patient Cohort | Graph */}
-          <div className="mt-6 border border-border rounded-md overflow-hidden" ref={containerRef}>
-            <div className="relative flex w-full h-[70vh] select-none">
+          <div className="mt-6 border border-border rounded-md overflow-hidden flex-1 min-h-0" ref={containerRef}>
+            <div className="relative flex w-full h-full select-none">
               {/* Left Pane */}
               <div
                 className="h-full overflow-auto"
