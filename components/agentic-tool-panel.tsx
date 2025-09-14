@@ -26,7 +26,6 @@ export function AgenticToolPanel() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Available Actions</CardTitle>
-            <p className="text-sm text-muted-foreground">AI-powered tools for patient management</p>
           </CardHeader>
           <CardContent className="space-y-3">
             <Button
@@ -107,7 +106,6 @@ export function AgenticToolPanel() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Audit Trail</CardTitle>
-            <p className="text-sm text-muted-foreground">Recent system actions</p>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">

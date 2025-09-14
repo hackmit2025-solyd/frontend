@@ -228,18 +228,44 @@ export default function UploadsPage() {
         const formData = new FormData()
         formData.append('file', file)
 
-        // Upload to our API endpoint
-        const response = await fetch('/api/upload', {
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 30000)
+        )
+
+        // Upload to PDF ingest API with timeout
+        const uploadPromise = fetch('/api/ingest/pdf', {
           method: 'POST',
           body: formData
         })
 
+        const response = await Promise.race([uploadPromise, timeoutPromise]) as Response
+
         if (response.ok) {
           const result = await response.json()
-          console.log('Upload successful:', result)
+          console.log('PDF ingest successful:', result)
 
-          // For now, use mock data for extracted data since processing is not implemented
-          const extractedData = mockExtractData(file.name)
+          // Extract upsert results from the API response
+          const { upsert_results } = result
+          const nodesCreated = upsert_results?.nodes_created || 0
+          const relationshipsCreated = upsert_results?.relationships_created || 0
+
+          // Create extracted data structure for display
+          const extractedData = {
+            nodes: Array.from({ length: nodesCreated }, (_, i) => ({
+              id: `node_${i + 1}`,
+              type: "Unknown" as const,
+              properties: { generated: true }
+            })),
+            relationships: Array.from({ length: relationshipsCreated }, (_, i) => ({
+              id: `rel_${i + 1}`,
+              type: "CONNECTED_TO",
+              source: `node_${i + 1}`,
+              target: `node_${(i + 2) % nodesCreated || 1}`,
+              properties: { generated: true }
+            })),
+            apiResult: result
+          }
 
           setUploadedFiles(prev =>
             prev.map(f =>
@@ -250,7 +276,7 @@ export default function UploadsPage() {
           )
         } else {
           const error = await response.json()
-          console.error('Upload failed:', error)
+          console.error('PDF ingest failed:', error)
 
           setUploadedFiles(prev =>
             prev.map(f =>
@@ -430,22 +456,32 @@ export default function UploadsPage() {
                     <div className="mt-2 p-3 bg-muted/50 rounded-lg text-sm">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <strong>Extracted Nodes:</strong> {file.extractedData.nodes?.length || 0}
-                          {file.extractedData.nodes?.slice(0, 3).map((node: ExtractedNode) => (
-                            <div key={node.id} className="ml-2 text-muted-foreground">
-                              • {node.type}: {node.properties.name || node.id}
+                          <strong>Nodes Created:</strong> {file.extractedData.apiResult?.upsert_results?.nodes_created || 0}
+                          {file.extractedData.apiResult?.upsert_results?.nodes_created > 0 && (
+                            <div className="ml-2 text-muted-foreground">
+                              • Successfully added to knowledge graph
                             </div>
-                          ))}
+                          )}
                         </div>
                         <div>
-                          <strong>Extracted Relationships:</strong> {file.extractedData.relationships?.length || 0}
-                          {file.extractedData.relationships?.slice(0, 3).map((rel: ExtractedRelationship) => (
-                            <div key={rel.id} className="ml-2 text-muted-foreground">
-                              • {rel.type}
+                          <strong>Relationships Created:</strong> {file.extractedData.apiResult?.upsert_results?.relationships_created || 0}
+                          {file.extractedData.apiResult?.upsert_results?.relationships_created > 0 && (
+                            <div className="ml-2 text-muted-foreground">
+                              • Successfully added to knowledge graph
                             </div>
-                          ))}
+                          )}
                         </div>
                       </div>
+                      {file.extractedData.apiResult && (
+                        <div className="mt-3 pt-3 border-t border-muted-foreground/20">
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div><strong>Document ID:</strong> {file.extractedData.apiResult.document_id}</div>
+                            <div><strong>Chunks Created:</strong> {file.extractedData.apiResult.chunks_created}</div>
+                            <div><strong>Entities Extracted:</strong> {file.extractedData.apiResult.entities_extracted}</div>
+                            <div><strong>Assertions Created:</strong> {file.extractedData.apiResult.assertions_created}</div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

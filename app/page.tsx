@@ -1,13 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { Search, Users, BarChart3 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Search, Maximize2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PatientTable } from "@/components/patient-table"
 import { QueryTranslation } from "@/components/query-translation"
-import { AgenticToolPanel } from "@/components/agentic-tool-panel"
 import { GraphVisualization } from "@/components/graph-visualization"
 import { StatusBar } from "@/components/status-bar"
 import { TopNavBar } from "@/components/top-nav-bar"
@@ -15,7 +13,13 @@ import { TopNavBar } from "@/components/top-nav-bar"
 export default function HealthcareDashboard() {
   const [query, setQuery] = useState("")
   const [showTranslation, setShowTranslation] = useState(false)
-  const [viewMode, setViewMode] = useState<"table" | "graph">("table")
+  // Split view state
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  // percentage of width for the left pane (30% to 70%)
+  const [leftPct, setLeftPct] = useState(50)
+  // Fullscreen graph overlay
+  const [graphFullscreen, setGraphFullscreen] = useState(false)
 
   const handleSearch = async () => {
     setShowTranslation(true)
@@ -50,14 +54,41 @@ export default function HealthcareDashboard() {
           doctor,
           query,
           status: "completed",
-          resultSummary: viewMode === "table" ? "Viewing patient cohort" : "Viewing graph",
-          details: { viewMode, query_id },
+          resultSummary: "Viewing cohort and graph",
+          details: { viewMode: "split", query_id },
         }),
       })
     } catch {
       // ignore logging failure client-side
     }
   }
+
+  useEffect(() => {
+    if (!isDragging) return
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      const container = containerRef.current
+      if (!container) return
+      const rect = container.getBoundingClientRect()
+      const clientX = (e as TouchEvent).touches
+        ? (e as TouchEvent).touches[0].clientX
+        : (e as MouseEvent).clientX
+      const x = Math.min(Math.max(clientX - rect.left, 0), rect.width)
+      const pct = (x / rect.width) * 100
+      const clamped = Math.min(70, Math.max(30, Math.round(pct)))
+      setLeftPct(clamped)
+    }
+    const stop = () => setIsDragging(false)
+    window.addEventListener("mousemove", onMove as any)
+    window.addEventListener("touchmove", onMove as any, { passive: false })
+    window.addEventListener("mouseup", stop)
+    window.addEventListener("touchend", stop)
+    return () => {
+      window.removeEventListener("mousemove", onMove as any)
+      window.removeEventListener("touchmove", onMove as any)
+      window.removeEventListener("mouseup", stop)
+      window.removeEventListener("touchend", stop)
+    }
+  }, [isDragging])
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-16">
@@ -92,32 +123,74 @@ export default function HealthcareDashboard() {
             />
           )}
 
-          {/* View Mode Tabs */}
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="mb-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="table" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Patient Cohort
-              </TabsTrigger>
-              <TabsTrigger value="graph" className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Graph View
-              </TabsTrigger>
-            </TabsList>
+          {/* Split View: Patient Cohort | Graph */}
+          <div className="mt-6 border border-border rounded-md overflow-hidden" ref={containerRef}>
+            <div className="relative flex w-full h-[70vh] select-none">
+              {/* Left Pane */}
+              <div
+                className="h-full overflow-auto"
+                style={{ width: `${leftPct}%` }}
+              >
+                <div className="h-full p-3">
+                  <PatientTable />
+                </div>
+              </div>
 
-            <TabsContent value="table" className="mt-6">
-              <PatientTable />
-            </TabsContent>
+              {/* Divider */}
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                onMouseDown={() => setIsDragging(true)}
+                onTouchStart={() => setIsDragging(true)}
+                className={`w-1.5 bg-border cursor-col-resize hover:bg-primary transition-colors ${
+                  isDragging ? "bg-primary" : ""
+                }`}
+                style={{ touchAction: "none" }}
+                title="Drag to resize"
+              />
 
-            <TabsContent value="graph" className="mt-6">
-              <GraphVisualization />
-            </TabsContent>
-          </Tabs>
+              {/* Right Pane (Graph) */}
+              <div className="h-full flex-1 overflow-hidden">
+                <div className="relative h-full p-3">
+                  {/* Fullscreen trigger button */}
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="absolute right-6 top-6 z-10"
+                    onClick={() => setGraphFullscreen(true)}
+                    title="Fullscreen graph"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </Button>
+                  <div className="h-full overflow-auto">
+                    <GraphVisualization key="split-view" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </main>
-
-        {/* Right Drawer - Agentic Tool Panel */}
-        <AgenticToolPanel />
       </div>
+
+      {/* Graph Fullscreen Overlay */}
+      {graphFullscreen && (
+        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm p-4">
+          <div className="relative h-full">
+            <Button
+              size="icon"
+              variant="outline"
+              className="absolute right-4 top-4 z-50"
+              onClick={() => setGraphFullscreen(false)}
+              title="Close fullscreen"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <div className="h-full overflow-auto">
+              <GraphVisualization key="fullscreen" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Bar */}
       <StatusBar />
