@@ -3,9 +3,24 @@
 import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Network, ZoomIn, ZoomOut, RotateCcw, Download } from "lucide-react"
+import { Network, ZoomIn, ZoomOut, RotateCcw, Download, Filter, Eye, EyeOff } from "lucide-react"
 import Sigma from "sigma"
 import { MultiGraph } from "graphology"
+import { GraphFilters } from "@/components/graph-filters"
+import {
+  GraphFilters as GraphFiltersType,
+  createDefaultFilters,
+  filterGraph,
+  getNodeTypes,
+  getRelationshipTypes,
+  getVisibleNodeCount,
+  getVisibleEdgeCount
+} from "@/lib/graph-filters"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 interface ApiNode {
   id: string
@@ -31,8 +46,15 @@ interface ApiResponse {
 export function GraphVisualization() {
   const vizRef = useRef<HTMLDivElement>(null)
   const sigmaRef = useRef<Sigma | null>(null)
+  const graphRef = useRef<MultiGraph | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [filters, setFilters] = useState<GraphFiltersType>(createDefaultFilters())
+  const [availableNodeTypes, setAvailableNodeTypes] = useState<string[]>([])
+  const [availableRelationshipTypes, setAvailableRelationshipTypes] = useState<string[]>([])
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [visibleStats, setVisibleStats] = useState({ nodes: 0, edges: 0 })
+  const [legendVisible, setLegendVisible] = useState(true)
 
   const getNodeColor = (label: string): string => {
     const colors = {
@@ -141,6 +163,26 @@ export function GraphVisualization() {
 
       const apiData = await fetchGraphData()
       const graph = createGraphFromApiData(apiData)
+      graphRef.current = graph
+
+      // Extract available types for filters
+      const nodeTypes = getNodeTypes(graph)
+      const relationshipTypes = getRelationshipTypes(graph)
+      setAvailableNodeTypes(nodeTypes)
+      setAvailableRelationshipTypes(relationshipTypes)
+
+      // Initialize filters with all available types
+      const initialFilters: GraphFiltersType = {
+        nodes: {
+          nodeTypes: nodeTypes,
+          showAll: true
+        },
+        edges: {
+          relationshipTypes: relationshipTypes,
+          showAll: true
+        }
+      }
+      setFilters(initialFilters)
 
       if (!vizRef.current) return // Double check after async operation
 
@@ -166,6 +208,9 @@ export function GraphVisualization() {
         const node = graph.getNodeAttributes(event.node)
         console.log("Node clicked:", node)
       })
+
+      // Update visible stats
+      updateVisibleStats(graph)
 
       setLoading(false)
     } catch (err) {
@@ -199,6 +244,65 @@ export function GraphVisualization() {
     console.log("Export functionality - would export current graph view")
   }
 
+  const updateVisibleStats = (graph: MultiGraph): void => {
+    setVisibleStats({
+      nodes: getVisibleNodeCount(graph),
+      edges: getVisibleEdgeCount(graph)
+    })
+  }
+
+  const applyFilters = (): void => {
+    if (!graphRef.current || !sigmaRef.current) return
+
+    filterGraph(graphRef.current, filters)
+    sigmaRef.current.refresh()
+    updateVisibleStats(graphRef.current)
+  }
+
+  const handleNodeTypesChange = (nodeTypes: string[]): void => {
+    setFilters(prev => ({
+      ...prev,
+      nodes: {
+        ...prev.nodes,
+        nodeTypes,
+        showAll: false
+      }
+    }))
+  }
+
+  const handleShowAllNodesChange = (showAll: boolean): void => {
+    setFilters(prev => ({
+      ...prev,
+      nodes: {
+        ...prev.nodes,
+        showAll,
+        nodeTypes: showAll ? availableNodeTypes : prev.nodes.nodeTypes
+      }
+    }))
+  }
+
+  const handleRelationshipTypesChange = (relationshipTypes: string[]): void => {
+    setFilters(prev => ({
+      ...prev,
+      edges: {
+        ...prev.edges,
+        relationshipTypes,
+        showAll: false
+      }
+    }))
+  }
+
+  const handleShowAllRelationshipsChange = (showAll: boolean): void => {
+    setFilters(prev => ({
+      ...prev,
+      edges: {
+        ...prev.edges,
+        showAll,
+        relationshipTypes: showAll ? availableRelationshipTypes : prev.edges.relationshipTypes
+      }
+    }))
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -227,6 +331,11 @@ export function GraphVisualization() {
     }
   }, [])
 
+  // Apply filters when they change
+  useEffect(() => {
+    applyFilters()
+  }, [filters])
+
   return (
     <Card>
       <CardHeader>
@@ -234,8 +343,29 @@ export function GraphVisualization() {
           <CardTitle className="flex items-center gap-2">
             <Network className="h-5 w-5" />
             Patient Network Graph
+            {!loading && (
+              <span className="text-sm text-muted-foreground font-normal">
+                ({visibleStats.nodes} nodes, {visibleStats.edges} edges)
+              </span>
+            )}
           </CardTitle>
           <div className="flex items-center gap-2">
+            <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filters
+                </Button>
+              </CollapsibleTrigger>
+            </Collapsible>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLegendVisible(!legendVisible)}
+            >
+              {legendVisible ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+              Legend
+            </Button>
             <Button variant="outline" size="sm" onClick={handleZoomIn}>
               <ZoomIn className="h-4 w-4 mr-2" />
               Zoom In
@@ -257,6 +387,24 @@ export function GraphVisualization() {
         <p className="text-sm text-muted-foreground">
           Interactive visualization of patient relationships and care networks
         </p>
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <CollapsibleContent>
+            {!loading && availableNodeTypes.length > 0 && (
+              <GraphFilters
+                nodeTypes={availableNodeTypes}
+                selectedNodeTypes={filters.nodes.nodeTypes}
+                onNodeTypesChange={handleNodeTypesChange}
+                showAllNodes={filters.nodes.showAll}
+                onShowAllNodesChange={handleShowAllNodesChange}
+                relationshipTypes={availableRelationshipTypes}
+                selectedRelationshipTypes={filters.edges.relationshipTypes}
+                onRelationshipTypesChange={handleRelationshipTypesChange}
+                showAllRelationships={filters.edges.showAll}
+                onShowAllRelationshipsChange={handleShowAllRelationshipsChange}
+              />
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       </CardHeader>
       <CardContent>
         <div className="relative h-96 bg-muted rounded-lg border-2 border-dashed border-border">
@@ -280,7 +428,7 @@ export function GraphVisualization() {
           />
 
           {/* Legend */}
-          {!loading && !error && (
+          {!loading && !error && legendVisible && (
             <div className="absolute bottom-4 left-4 bg-background border border-border rounded p-3 space-y-2 z-10">
               <h4 className="font-semibold text-sm">Legend</h4>
               <div className="flex items-center gap-2 text-xs">
