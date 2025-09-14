@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { Search, Maximize2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
 import { PatientTable } from "@/components/patient-table"
 import { QueryTranslation } from "@/components/query-translation"
 import { GraphVisualization } from "@/components/graph-visualization"
@@ -21,14 +22,46 @@ export default function HealthcareDashboard() {
   // Fullscreen graph overlay
   const [graphFullscreen, setGraphFullscreen] = useState(false)
 
+  const [graphData, setGraphData] = useState<any>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+
   const handleSearch = async () => {
+    setSearchLoading(true)
+    setLoadingProgress(0)
+
+    // Animate progress bar
+    const progressInterval = setInterval(() => {
+      setLoadingProgress(prev => {
+        if (prev >= 90) return prev
+        return prev + Math.random() * 15
+      })
+    }, 200)
     setShowTranslation(true)
     const doctor = "Dr. Demo"
     const summary = query.slice(0, 200)
     const query_id = crypto.randomUUID()
 
     try {
-      // Call the new search API route
+      // Call the query-graph API endpoint
+      const queryGraphResponse = await fetch("/api/search/query-graph", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          limit: 50,
+        }),
+      })
+
+      if (queryGraphResponse.ok) {
+        const graphData = await queryGraphResponse.json()
+        setGraphData(graphData)
+      } else {
+        const errorData = await queryGraphResponse.json()
+        console.error("Query graph search failed:", errorData)
+      }
+
+      // Call the original search API route
       const searchResponse = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,6 +93,14 @@ export default function HealthcareDashboard() {
       })
     } catch {
       // ignore logging failure client-side
+    } finally {
+      // Complete progress and clean up
+      clearInterval(progressInterval)
+      setLoadingProgress(100)
+      setTimeout(() => {
+        setSearchLoading(false)
+        setLoadingProgress(0)
+      }, 300)
     }
   }
 
@@ -109,10 +150,31 @@ export default function HealthcareDashboard() {
                 className="pl-10 text-base h-12"
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               />
-              <Button onClick={handleSearch} className="absolute right-2 top-1/2 -translate-y-1/2" size="sm">
-                Search
+              <Button
+                onClick={handleSearch}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+                size="sm"
+                disabled={searchLoading}
+              >
+                {searchLoading ? "Searching..." : "Search"}
               </Button>
             </div>
+
+            {/* Loading Bar */}
+            {searchLoading && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>
+                    {loadingProgress < 30 ? "Processing natural language query..." :
+                     loadingProgress < 60 ? "Analyzing patient data..." :
+                     loadingProgress < 90 ? "Building knowledge graph..." :
+                     "Finalizing results..."}
+                  </span>
+                  <span>{Math.round(loadingProgress)}%</span>
+                </div>
+                <Progress value={loadingProgress} className="h-2" />
+              </div>
+            )}
           </div>
 
           {/* Query Translation Panel */}
@@ -163,7 +225,7 @@ export default function HealthcareDashboard() {
                     <Maximize2 className="h-4 w-4" />
                   </Button>
                   <div className="h-full overflow-auto">
-                    <GraphVisualization key="split-view" />
+                    <GraphVisualization key="split-view" data={graphData} />
                   </div>
                 </div>
               </div>
@@ -186,7 +248,7 @@ export default function HealthcareDashboard() {
               <X className="h-4 w-4" />
             </Button>
             <div className="h-full overflow-auto">
-              <GraphVisualization key="fullscreen" />
+              <GraphVisualization key="fullscreen" data={graphData} />
             </div>
           </div>
         </div>

@@ -108,19 +108,12 @@ export function PatientTable() {
 
                 {isOpen && (
                   <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
-                        <h4 className="font-semibold mb-2">Contact & PCP</h4>
+                        <h4 className="font-semibold mb-2">Contact</h4>
                         <p className="text-sm text-muted-foreground">Primary: {patient.pcp}</p>
                         <p className="text-sm text-muted-foreground">Phone: (555) 000-0000</p>
                         <p className="text-sm text-muted-foreground">Email: patient@example.com</p>
-                      </div>
-
-                      <div>
-                        <h4 className="font-semibold mb-2">Coverage</h4>
-                        <Badge variant="secondary" className="mb-2">{patient.policy}</Badge>
-                        <p className="text-sm text-muted-foreground">Status: Active</p>
-                        <p className="text-sm text-muted-foreground">PCP: {patient.pcp}</p>
                       </div>
 
                       <div>

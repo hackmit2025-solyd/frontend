@@ -1,17 +1,16 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Filter, Download, RefreshCw } from "lucide-react"
+import { Search, Download, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ActionHistory } from "@/components/action-history"
-import { ActionFilters } from "@/components/action-filters"
 import { ActionStats } from "@/components/action-stats"
 import { TopNavBar } from "@/components/top-nav-bar"
 
 export default function ActionsPage() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [showFilters, setShowFilters] = useState(false)
+  // Filters removed for now; search acts as the filter
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -37,7 +36,7 @@ export default function ActionsPage() {
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Search */}
         <div className="flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -48,18 +47,8 @@ export default function ActionsPage() {
               className="pl-10"
             />
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowFilters(!showFilters)}
-            className={showFilters ? "bg-muted" : ""}
-          >
-            <Filter className="h-4 w-4 mr-2" />
-            Filters
-          </Button>
         </div>
 
-        {/* Filters Panel */}
-        {showFilters && <ActionFilters />}
 
         {/* Stats Overview */}
         <ActionStats />

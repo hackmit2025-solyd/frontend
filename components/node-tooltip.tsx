@@ -19,6 +19,8 @@ interface NodeTooltipProps {
   visible: boolean
   pinned: boolean
   containerRect?: DOMRect
+  onMouseEnter?: () => void
+  onMouseLeave?: () => void
 }
 
 const formatPropertyValue = (key: string, value: any): string => {
@@ -52,7 +54,7 @@ const formatPropertyKey = (key: string): string => {
     .join(" ")
 }
 
-export function NodeTooltip({ data, visible, pinned, containerRect }: NodeTooltipProps) {
+export function NodeTooltip({ data, visible, pinned, containerRect, onMouseEnter, onMouseLeave }: NodeTooltipProps) {
   if (!visible || !data) {
     return null
   }
@@ -85,14 +87,16 @@ export function NodeTooltip({ data, visible, pinned, containerRect }: NodeToolti
 
   return (
     <div
-      className={`absolute z-50 pointer-events-none transition-all duration-200 ${
+      className={`absolute z-50 transition-all duration-200 ${
         visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-      }`}
+      } ${pinned ? 'pointer-events-auto' : 'pointer-events-none'}`}
       style={{
         left: tooltipX,
         top: tooltipY,
         transform: 'translate(0, 0)',
       }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <Card className="w-72 shadow-lg border-2">
         <CardHeader className="pb-2">
