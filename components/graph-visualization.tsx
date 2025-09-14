@@ -11,11 +11,8 @@ import { useCohort, type CohortPatient } from "@/components/cohort-provider"
 import {
   GraphFilters as GraphFiltersType,
   createDefaultFilters,
-  filterGraph,
   getNodeTypes,
-  getRelationshipTypes,
-  getVisibleNodeCount,
-  getVisibleEdgeCount
+  getRelationshipTypes
 } from "@/lib/graph-filters"
 import {
   Collapsible,
@@ -383,47 +380,6 @@ export function GraphVisualization({
         zIndex: true
       })
 
-      // Add edge reducer for dynamic edge coloring and visibility
-      sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
-        const relationshipType = data.relationshipType || data.label || 'default'
-        const baseColor = getEdgeColor(relationshipType)
-
-        // Check if edge should be visible
-        const visible = isEdgeVisible(edge)
-
-        // Make edge brighter when highlighted
-        const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
-
-        return {
-          ...data,
-          color: color,
-          hidden: !visible
-        }
-      })
-
-      // Add node reducer for dynamic visibility and traversal highlighting
-      sigmaRef.current.setSetting('nodeReducer', (node: string, data: any) => {
-        const visible = isNodeVisible(node)
-        const isTraversalCenter = traversalState.active && traversalState.centerNodeId === node
-        const isTraversalRevealed = traversalState.active && traversalState.revealedNodes.has(node) && node !== traversalState.centerNodeId
-
-        // Highlight traversal center node
-        const size = data.size || 12
-        const finalSize = isTraversalCenter ? size * 1.5 : size
-
-        // Add border for traversal-revealed nodes
-        const borderColor = isTraversalCenter ? '#ff6b35' : (isTraversalRevealed ? '#4ade80' : undefined)
-        const borderWidth = (isTraversalCenter || isTraversalRevealed) ? 3 : 0
-
-        return {
-          ...data,
-          size: finalSize,
-          borderColor: borderColor,
-          borderWidth: borderWidth,
-          hidden: !visible
-        }
-      })
-
       // Add all the event handlers
       setupEventHandlers(graph)
 
@@ -432,8 +388,8 @@ export function GraphVisualization({
         setContainerRect(vizRef.current.getBoundingClientRect())
       }
 
-      // Update visible stats
-      updateVisibleStats(graph)
+      // Setup initial reducers and apply filters
+      applyFilters()
 
       setLoading(false)
       setError(null)
@@ -648,47 +604,6 @@ export function GraphVisualization({
         zIndex: true
       })
 
-      // Add edge reducer for dynamic edge coloring and visibility
-      sigmaRef.current.setSetting('edgeReducer', (edge: string, data: any) => {
-        const relationshipType = data.relationshipType || data.label || 'default'
-        const baseColor = getEdgeColor(relationshipType)
-
-        // Check if edge should be visible
-        const visible = isEdgeVisible(edge)
-
-        // Make edge brighter when highlighted
-        const color = data.highlighted ? baseColor + 'FF' : baseColor + '99'
-
-        return {
-          ...data,
-          color: color,
-          hidden: !visible
-        }
-      })
-
-      // Add node reducer for dynamic visibility and traversal highlighting
-      sigmaRef.current.setSetting('nodeReducer', (node: string, data: any) => {
-        const visible = isNodeVisible(node)
-        const isTraversalCenter = traversalState.active && traversalState.centerNodeId === node
-        const isTraversalRevealed = traversalState.active && traversalState.revealedNodes.has(node) && node !== traversalState.centerNodeId
-
-        // Highlight traversal center node
-        const size = data.size || 12
-        const finalSize = isTraversalCenter ? size * 1.5 : size
-
-        // Add border for traversal-revealed nodes
-        const borderColor = isTraversalCenter ? '#ff6b35' : (isTraversalRevealed ? '#4ade80' : undefined)
-        const borderWidth = (isTraversalCenter || isTraversalRevealed) ? 3 : 0
-
-        return {
-          ...data,
-          size: finalSize,
-          borderColor: borderColor,
-          borderWidth: borderWidth,
-          hidden: !visible
-        }
-      })
-
       // Add all the event handlers
       setupEventHandlers(graph)
 
@@ -697,8 +612,8 @@ export function GraphVisualization({
         setContainerRect(vizRef.current.getBoundingClientRect())
       }
 
-      // Update visible stats
-      updateVisibleStats(graph)
+      // Setup initial reducers and apply filters
+      applyFilters()
 
       setLoading(false)
     } catch (err) {
@@ -731,9 +646,24 @@ export function GraphVisualization({
   // Export button removed
 
   const updateVisibleStats = (graph: MultiGraph): void => {
+    let visibleNodeCount = 0
+    let visibleEdgeCount = 0
+
+    graph.forEachNode((nodeId) => {
+      if (isNodeVisible(nodeId)) {
+        visibleNodeCount++
+      }
+    })
+
+    graph.forEachEdge((edgeId) => {
+      if (isEdgeVisible(edgeId)) {
+        visibleEdgeCount++
+      }
+    })
+
     setVisibleStats({
-      nodes: getVisibleNodeCount(graph),
-      edges: getVisibleEdgeCount(graph)
+      nodes: visibleNodeCount,
+      edges: visibleEdgeCount
     })
   }
 
