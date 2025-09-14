@@ -118,7 +118,7 @@ export async function POST(request: Request) {
     // Loop through nodes and check for names
     if (data.nodes && Array.isArray(data.nodes)) {
       console.log(`Query Graph API - Found ${data.nodes.length} nodes:`)
-      data.nodes.forEach((node, index) => {
+      data.nodes.forEach((node: any, index: number) => {
         console.log(`Node ${index}:`, {
           id: node.id || 'No ID',
           name: node.name || 'No name',

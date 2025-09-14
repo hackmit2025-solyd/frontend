@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+// Increase function timeout for hosted platforms (e.g., Vercel)
+export const maxDuration = 300 // seconds
 
 export async function POST(request: Request) {
   try {
@@ -24,9 +26,10 @@ export async function POST(request: Request) {
     const externalFormData = new FormData()
     externalFormData.append('file', file, file.name)
 
-    // Create timeout controller (30 seconds)
+    // Create timeout controller (5 minutes to allow OCR/LLM pipelines)
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 60000)
+    const timeoutMs = 300_000
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
     try {
       // Forward request to the real API
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
             detail: [
               {
                 loc: ["request"],
-                msg: "Request timeout after 30 seconds",
+                msg: `Request timeout after ${Math.floor(timeoutMs / 1000)} seconds`,
                 type: "timeout_error"
               }
             ]

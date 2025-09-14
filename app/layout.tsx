@@ -10,7 +10,7 @@ import { Suspense } from "react"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Healthcare Agent Dashboard",
+  title: "Solyd Health",
   description: "AI-powered healthcare dashboard for physicians",
   generator: "v0.app",
 }

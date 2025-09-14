@@ -10,6 +10,13 @@ import { Separator } from "@/components/ui/separator"
 import { TopNavBar } from "@/components/top-nav-bar"
 import { StatusBar } from "@/components/status-bar"
 import { DocumentTemplateEditor } from "@/components/document-template-editor"
+import { UploadGraphVisualization } from "@/components/upload-graph-visualization"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
 interface UploadedFile {
   id: string
@@ -40,10 +47,45 @@ interface ExtractedData {
   relationships: ExtractedRelationship[]
 }
 
+interface ApiResponse {
+  nodes: ExtractedNode[]
+  edges: ExtractedRelationship[]
+}
+
 export default function UploadsPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [editingFile, setEditingFile] = useState<UploadedFile | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [expandedGraphs, setExpandedGraphs] = useState<Set<string>>(new Set())
+
+  const fetchGraphData = async (): Promise<ApiResponse> => {
+    const response = await fetch('https://api.solyd.serve.cx/api/graph/full', {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch graph data')
+    }
+
+    return response.json()
+  }
+
+  const filterGraphDataByDocumentId = (graphData: ApiResponse, documentId: string) => {
+    const filteredNodes = graphData.nodes.filter(node =>
+      node.properties.document_id === documentId
+    )
+    const filteredEdges = graphData.edges.filter(edge =>
+      edge.properties.document_id === documentId
+    )
+
+    return {
+      nodes: filteredNodes,
+      relationships: filteredEdges
+    }
+  }
 
   const mockExtractData = (fileName: string): ExtractedData => {
     // Mock extracted data based on document type
@@ -230,7 +272,7 @@ export default function UploadsPage() {
 
         // Create a timeout promise
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Request timeout after 30 seconds')), 300000)
+          setTimeout(() => reject(new Error('Request timeout after 300 seconds')), 300000)
         )
 
         // Upload to PDF ingest API with timeout
@@ -245,13 +287,16 @@ export default function UploadsPage() {
           const result = await response.json()
           console.log('PDF ingest successful:', result)
 
+          // Extract document_id from the response
+          const documentId = result.document_id
+          console.log('Document ID:', documentId)
+
           // Extract upsert results from the API response
           const { upsert_results } = result
           const nodesCreated = upsert_results?.nodes_created || 0
           const relationshipsCreated = upsert_results?.relationships_created || 0
 
-          // Create extracted data structure for display
-          const extractedData = {
+          let extractedData = {
             nodes: Array.from({ length: nodesCreated }, (_, i) => ({
               id: `node_${i + 1}`,
               type: "Unknown" as const,
@@ -265,6 +310,26 @@ export default function UploadsPage() {
               properties: { generated: true }
             })),
             apiResult: result
+          }
+
+          // If document_id is available, fetch and filter graph data
+          if (documentId) {
+            try {
+              const graphData = await fetchGraphData()
+              const filteredData = filterGraphDataByDocumentId(graphData, documentId)
+
+              // Use filtered data if available, otherwise fall back to generated data
+              if (filteredData.nodes.length > 0 || filteredData.relationships.length > 0) {
+                extractedData = {
+                  nodes: filteredData.nodes as any,
+                  relationships: filteredData.relationships as any,
+                  apiResult: result
+                }
+              }
+            } catch (error) {
+              console.error('Failed to fetch or filter graph data:', error)
+              // Continue with the generated data
+            }
           }
 
           setUploadedFiles(prev =>
@@ -336,6 +401,18 @@ export default function UploadsPage() {
     console.log('Submitting to backend:', file.extractedData)
     // Here you would make the actual API call
     alert(`Data for ${file.name} submitted to backend successfully!`)
+  }
+
+  const toggleGraphExpanded = (fileId: string) => {
+    setExpandedGraphs(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId)
+      } else {
+        newSet.add(fileId)
+      }
+      return newSet
+    })
   }
 
   if (editingFile) {
@@ -447,6 +524,23 @@ export default function UploadsPage() {
                           >
                             Submit to Backend
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleGraphExpanded(file.id)}
+                          >
+                            {expandedGraphs.has(file.id) ? (
+                              <>
+                                <ChevronDown className="h-4 w-4 mr-2" />
+                                Hide Graph
+                              </>
+                            ) : (
+                              <>
+                                <ChevronRight className="h-4 w-4 mr-2" />
+                                Show Graph
+                              </>
+                            )}
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -482,6 +576,22 @@ export default function UploadsPage() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* Expandable Graph Visualization */}
+                  {file.status === 'completed' && file.extractedData && expandedGraphs.has(file.id) && (
+                    <div className="mt-4">
+                      <div className="h-96 border rounded-lg overflow-hidden">
+                        <UploadGraphVisualization
+                          data={{
+                            nodes: file.extractedData.nodes,
+                            relationships: file.extractedData.relationships
+                          }}
+                          documentId={file.extractedData.apiResult?.document_id || 'unknown'}
+                          fileName={file.name}
+                        />
+                      </div>
                     </div>
                   )}
 

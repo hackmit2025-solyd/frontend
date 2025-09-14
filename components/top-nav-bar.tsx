@@ -45,7 +45,7 @@ export function TopNavBar() {
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <Activity className="h-8 w-8 text-primary" />
-            <h1 className="text-xl font-semibold text-balance">Healthcare Agent Dashboard</h1>
+            <h1 className="text-xl font-semibold text-balance">Solyd Health</h1>
           </div>
           
           {/* Navigation + Integrated Theme */}
